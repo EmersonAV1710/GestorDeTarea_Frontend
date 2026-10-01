@@ -1,0 +1,2 @@
+# Integración de API
+El frontend consume únicamente `NEXT_PUBLIC_API_URL` (predeterminado `http://localhost:8000/api`). Contrato completo en el repositorio backend: `GestorDeTarea_Backend/API_CONTRACT.md`. Fechas ISO `YYYY-MM-DD`; JWT Bearer guardado solo en memoria de sesión del navegador. Endpoints: login, listado/creación de cursos, análisis multipart de PDF, confirmación explícita de propuestas, actividades filtradas y PATCH de completado.
