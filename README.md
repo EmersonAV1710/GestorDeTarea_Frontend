@@ -1,6 +1,6 @@
 # Gestor de tareas académicas — Frontend
 
-Next.js y React implementan interfaz en español y consumen la API Python. No se conecta directamente a PostgreSQL ni al proveedor de IA.
+Next.js y React implementan interfaz en español y consumen la API Python. No se conecta directamente a PostgreSQL ni al proveedor de IA. La API FastAPI es la única interfaz de datos; aunque más adelante PostgreSQL se aloje en Supabase, el navegador seguirá consumiendo FastAPI y no el SDK ni las APIs de Supabase.
 
 ## Ubuntu
 
