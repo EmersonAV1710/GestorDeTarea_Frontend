@@ -1,5 +1,11 @@
 # Gestor de tareas académicas — Frontend
 
+Validación local: `npm test` comprueba propuestas, fechas y mensajes de error;
+`npm run build` comprueba la compilación de producción. Instala antes con `npm ci`.
+La revisión muestra el fragmento de origen de cada propuesta, rechaza datos
+inválidos y conserva las correcciones si falla el guardado. Al iniciar otro análisis
+se descartan las propuestas anteriores; al cerrar sesión se limpia la cuenta.
+
 Next.js y React implementan interfaz en español y consumen la API Python. No se conecta directamente a PostgreSQL ni al proveedor de IA. La API FastAPI es la única interfaz de datos; aunque más adelante PostgreSQL se aloje en Supabase, el navegador seguirá consumiendo FastAPI y no el SDK ni las APIs de Supabase.
 
 ## Ubuntu
