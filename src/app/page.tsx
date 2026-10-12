@@ -1,19 +1,85 @@
 "use client";
 import {useEffect,useMemo,useRef,useState} from "react";
+import { clearReviewDraft, parsePendingReviews, parseSavedDocuments, restoreReviewDraft, storeReviewDraft, type PendingReview, type SavedDocument } from "../lib/reviewDraft";
+import { compareActivityDates } from "../lib/activityOrder";
+import { matchesActivityType } from "../lib/activityTypes";
 import {apiError,localToday,parseAnalysis,proposalError,type Proposal} from "../lib/proposals";
+import type { Activity, Course } from "../components/types";
+import { Toast } from "../components/Toast";
+import { SidebarIcon } from "../components/SidebarIcon";
+import { UserPreferencesMenu } from "../components/UserPreferencesMenu";
+import { AuthPage } from "../components/pages/AuthPage";
+import { PanelPage } from "../components/pages/PanelPage";
+import { TasksPage } from "../components/pages/TasksPage";
+import { CalendarPage } from "../components/pages/CalendarPage";
+import { CoursesPage } from "../components/pages/CoursesPage";
+import { AnalyzePage } from "../components/pages/AnalyzePage";
 const API=process.env.NEXT_PUBLIC_API_URL||"http://localhost:8000/api";
+const NAV_ITEMS=[
+ {id:"panel",label:"Panel"},
+ {id:"tareas",label:"Mis tareas"},
+ {id:"calendario",label:"Calendario"},
+ {id:"cursos",label:"Cursos"},
+ {id:"cargar",label:"Analizar documento"},
+] as const;
 class SessionExpiredError extends Error {}
-type Course={id:string;name:string;code?:string;term?:string}; type Activity={id:string;title:string;description:string;due_date:string|null;status:string;course_id:string;review_required:boolean};
+function useTimedMessage(autoClose = true) {
+ const [message,setMessage]=useState("");
+ const [version,setVersion]=useState(0);
+ function update(value:string){setMessage(value);if(value)setVersion(v=>v+1)}
+ useEffect(()=>{
+  if(!message || !autoClose)return;
+  const timeout=window.setTimeout(()=>setMessage(""),5000);
+  return ()=>window.clearTimeout(timeout);
+ },[message,version,autoClose]);
+ return [message,update,version] as const;
+}
 export default function Home(){
- const [token,setToken]=useState(""); const [email,setEmail]=useState(""); const [username,setUsername]=useState(""); const [password,setPassword]=useState(""); const [passwordConfirmation,setPasswordConfirmation]=useState(""); const [authMode,setAuthMode]=useState<"login"|"register">("login"); const [authError,setAuthError]=useState(""); const [courses,setCourses]=useState<Course[]>([]); const [items,setItems]=useState<Activity[]>([]); const [courseFilter,setCourseFilter]=useState(""); const [from,setFrom]=useState(""); const [to,setTo]=useState(""); const [section,setSection]=useState("panel"); const [busy,setBusy]=useState(false); const [error,setError]=useState(""); const [notice,setNotice]=useState(""); const [newCourse,setNewCourse]=useState(""); const [uploadCourse,setUploadCourse]=useState(""); const [proposals,setProposals]=useState<Proposal[]>([]); const [docId,setDocId]=useState(""); const [loaded,setLoaded]=useState(false);
+ const [token,setToken]=useState(""); const [email,setEmail]=useState(""); const [username,setUsername]=useState(""); const [password,setPassword]=useState(""); const [passwordConfirmation,setPasswordConfirmation]=useState(""); const [authMode,setAuthMode]=useState<"login"|"register">("login"); const [authError,setAuthError,authErrorId]=useTimedMessage(); const [courses,setCourses]=useState<Course[]>([]); const [items,setItems]=useState<Activity[]>([]); const [courseFilter,setCourseFilter]=useState(""); const [typeFilter,setTypeFilter]=useState(""); const [from,setFrom]=useState(""); const [to,setTo]=useState(""); const [section,setSection]=useState("panel"); const [taskView,setTaskView]=useState<"board"|"list">("board"); const [logoutOpen,setLogoutOpen]=useState(false); const [busy,setBusy]=useState(false); const [error,setError,errorId]=useTimedMessage(); const [notice,setNotice,noticeId]=useTimedMessage(); const [newCourse,setNewCourse]=useState(""); const [editingCourse,setEditingCourse]=useState<Course|null>(null); const [confirmDeactivateId,setConfirmDeactivateId]=useState(""); const [uploadCourse,setUploadCourse]=useState(""); const [selectedFileName,setSelectedFileName]=useState(""); const [proposals,setProposals]=useState<Proposal[]>([]); const [docId,setDocId]=useState(""); const [loaded,setLoaded]=useState(false);
+ const [logoutError,setLogoutError]=useState("");
+ const [pendingReviews,setPendingReviews]=useState<PendingReview[]>([]);
+ const [savedDocuments,setSavedDocuments]=useState<SavedDocument[]>([]);
+ const [deleteSavedError,setDeleteSavedError]=useState("");
+ const [resumeTargetId,setResumeTargetId]=useState("");
+ const [reviewFileName,setReviewFileName]=useState("");
+ const [reviewCourseId,setReviewCourseId]=useState("");
+ const [panelCourseFilter,setPanelCourseFilter]=useState("");
+ const [panelTypeFilter,setPanelTypeFilter]=useState("");
+ useEffect(()=>{
+  if(!docId||!username||!reviewCourseId)return;
+  const review={document_id:docId,filename:reviewFileName,course_id:reviewCourseId,proposals};
+  storeReviewDraft(review,username);
+  setPendingReviews(previous=>previous.map(item=>item.document_id===docId?review:item));
+ },[docId,proposals,username,reviewFileName,reviewCourseId]);
+ const uploadFormRef=useRef<HTMLFormElement>(null);
+ const reviewRef=useRef<HTMLElement>(null);
  const actionPending=useRef(false);
  const sessionVersion=useRef(0);
+ const logoutDialogRef=useRef<HTMLDialogElement>(null);
+ const logoutButtonRef=useRef<HTMLButtonElement>(null);
+ useEffect(()=>{
+  if(section!=="cargar"||resumeTargetId!==docId||!resumeTargetId||!proposals.length||!reviewRef.current)return;
+  reviewRef.current.scrollIntoView({block:"start"});
+  reviewRef.current.focus({preventScroll:true});
+  setResumeTargetId("");
+ },[section,resumeTargetId,docId,proposals.length]);
+ useEffect(()=>{
+  if(section==="cargar"||!docId)return;
+  setDocId("");setReviewCourseId("");setReviewFileName("");setResumeTargetId("");setProposals([]);
+ },[section,docId]);
+ useEffect(()=>{if(section!=="cargar")setSelectedFileName("")},[section]);
+ useEffect(()=>{
+  const dialog=logoutDialogRef.current;
+  if(logoutOpen&&!dialog?.open)dialog?.showModal();
+  if(!logoutOpen&&dialog?.open)dialog.close();
+ },[logoutOpen]);
  function clearAccount(){
   sessionVersion.current+=1;
   sessionStorage.removeItem("gestor_token");sessionStorage.removeItem("gestor_username");
   setToken("");setUsername("");setEmail("");setCourses([]);setItems([]);setProposals([]);setDocId("");
-  setUploadCourse("");setCourseFilter("");setFrom("");setTo("");setNewCourse("");
-  setLoaded(false);setSection("panel");setNotice("");setError("");setPassword("");setPasswordConfirmation("");
+  setPendingReviews([]);setSavedDocuments([]);setDeleteSavedError("");setReviewFileName("");setReviewCourseId("");setResumeTargetId("");setPanelCourseFilter("");setPanelTypeFilter("");
+  setUploadCourse("");setSelectedFileName("");setCourseFilter("");setTypeFilter("");setFrom("");setTo("");setNewCourse("");setEditingCourse(null);setConfirmDeactivateId("");
+  setLoaded(false);setSection("panel");setTaskView("board");setLogoutOpen(false);setNotice("");setError("");setPassword("");setPasswordConfirmation("");
  }
  const request=async(path:string,init:RequestInit={})=>{
   const version=sessionVersion.current;
@@ -24,19 +90,19 @@ export default function Home(){
   if(!res.ok)throw Error(apiError(body,`Error ${res.status}`));
   return body;
  };
- async function loadAccount(t:string){
+ async function loadAccount(t:string,draftUsername:string){
   const headers={Authorization:`Bearer ${t}`};
-  const [c,a]=await Promise.all([fetch(API+"/courses",{headers}),fetch(API+"/activities",{headers})]);
-  if(c.status===401||a.status===401)throw new SessionExpiredError("Tu sesión venció. Ingresa de nuevo.");
-  if(!c.ok||!a.ok)throw Error("No se pudo cargar la información. Inténtalo de nuevo.");
+  const [c,a,d,s]=await Promise.all([fetch(API+"/courses",{headers}),fetch(API+"/activities",{headers}),fetch(API+"/documents/pending",{headers}),fetch(API+"/documents",{headers})]);
+  if(c.status===401||a.status===401||d.status===401||s.status===401)throw new SessionExpiredError("Tu sesión venció. Ingresa de nuevo.");
+  if(!c.ok||!a.ok||!d.ok||!s.ok)throw Error("No se pudo cargar la información. Inténtalo de nuevo.");
   const [courses,items]=await Promise.all([c.json(),a.json()]);
   if(!Array.isArray(courses)||!Array.isArray(items))throw Error("El servidor devolvió información inválida.");
-  return {courses,items};
+  return {courses,items,pendingReviews:parsePendingReviews(await d.json()).map(review=>restoreReviewDraft(review,draftUsername)),savedDocuments:parseSavedDocuments(await s.json())};
  }
  async function refresh(){
   if(!token)return;
   const version=sessionVersion.current;
-  try{const data=await loadAccount(token);if(version!==sessionVersion.current)return;setCourses(data.courses);setItems(data.items);setLoaded(true)}
+  try{const data=await loadAccount(token,username);if(version!==sessionVersion.current)return;setCourses(data.courses);setItems(data.items);setPendingReviews(data.pendingReviews);setSavedDocuments(data.savedDocuments);setLoaded(true)}
   catch(e){
    if(version!==sessionVersion.current)return;
    if(e instanceof SessionExpiredError){clearAccount();setAuthError(e.message)}
@@ -48,43 +114,135 @@ export default function Home(){
   const version=sessionVersion.current;
   const t=sessionStorage.getItem("gestor_token");
   const savedUsername=sessionStorage.getItem("gestor_username")||"";
-  if(t)void loadAccount(t).then(data=>{
+  if(t)void loadAccount(t,savedUsername).then(data=>{
    if(cancelled||version!==sessionVersion.current)return;
-   setToken(t);setUsername(savedUsername);setCourses(data.courses);setItems(data.items);setLoaded(true);
+   setToken(t);setUsername(savedUsername.toUpperCase());setCourses(data.courses);setItems(data.items);setPendingReviews(data.pendingReviews);setSavedDocuments(data.savedDocuments);setLoaded(true);
   }).catch(e=>{if(!cancelled&&version===sessionVersion.current){clearAccount();setAuthError(e instanceof Error?e.message:"Error de conexión")}});
   return ()=>{cancelled=true};
  },[]);
- const shown=useMemo(()=>from&&to&&from>to?[]:items.filter(x=>(!courseFilter||x.course_id===courseFilter)&&(!from||!!x.due_date&&x.due_date>=from)&&(!to||!!x.due_date&&x.due_date<=to)),[items,courseFilter,from,to]);
- const upcoming=shown.filter(x=>x.status==="pending"&&x.due_date&&x.due_date>=localToday()).sort((a,b)=>(a.due_date||"").localeCompare(b.due_date||""));
+ const shown=useMemo(()=>from&&to&&from>to?[]:items.filter(x=>matchesActivityType(x.activity_type,typeFilter)&&(!courseFilter||x.course_id===courseFilter)&&(!from||!!x.due_date&&x.due_date>=from)&&(!to||!!x.due_date&&x.due_date<=to)),[items,courseFilter,typeFilter,from,to]);
+ const activeCourses=courses.filter(c=>c.is_active);
+ const panelShown=items.filter(x=>matchesActivityType(x.activity_type,panelTypeFilter)&&(!panelCourseFilter||x.course_id===panelCourseFilter));
+ const upcoming=panelShown.filter(x=>x.status==="pending"&&x.due_date&&x.due_date>=localToday()).sort(compareActivityDates);
+ const overdue=panelShown.filter(x=>x.status==="pending"&&x.due_date&&x.due_date<localToday()).sort(compareActivityDates);
+ const undated=panelShown.filter(x=>x.status==="pending"&&!x.due_date);
+ function resumeReview(review:PendingReview){
+  if(actionPending.current)return;
+  const restored=restoreReviewDraft(review,username);
+  uploadFormRef.current?.reset();setSelectedFileName("");setUploadCourse(restored.course_id);
+  setDocId(restored.document_id);setReviewCourseId(restored.course_id);setReviewFileName(restored.filename);
+  setResumeTargetId(restored.document_id);
+  setProposals([...restored.proposals].sort(compareActivityDates));setError("");setNotice("Revisión lista para continuar.");
+ }
+ async function deleteReview(documentId:string){
+  if(actionPending.current)return;
+  actionPending.current=true;setBusy(true);setError("");
+  const version=sessionVersion.current;
+  try{
+   await request(`/documents/${documentId}`,{method:"DELETE"});
+   if(version!==sessionVersion.current)return;
+   clearReviewDraft(documentId,username);
+   setPendingReviews(previous=>previous.filter(review=>review.document_id!==documentId));
+   if(docId===documentId){
+    setDocId("");setReviewCourseId("");setReviewFileName("");setResumeTargetId("");setProposals([]);
+    setUploadCourse("");setSelectedFileName("");uploadFormRef.current?.reset();
+   }
+   setNotice("Revisión pendiente eliminada.");
+  }catch(e){if(version===sessionVersion.current)setError(e instanceof Error?e.message:"No se pudo quitar la revisión.")}
+  finally{actionPending.current=false;setBusy(false)}
+ }
+ async function deleteSavedDocument(documentId:string){
+  if(actionPending.current)return false;
+  actionPending.current=true;setBusy(true);setDeleteSavedError("");
+  const version=sessionVersion.current;
+  try{
+   await request(`/documents/${documentId}/saved`,{method:"DELETE"});
+   if(version!==sessionVersion.current)return false;
+   setSavedDocuments(previous=>previous.filter(document=>document.document_id!==documentId));
+   setItems(previous=>previous.filter(activity=>activity.document_id!==documentId));
+   setNotice("Documento y actividades asociadas eliminados.");
+   return true;
+  }catch(e){if(version===sessionVersion.current)setDeleteSavedError(e instanceof Error?e.message:"No se pudo borrar el documento.");return false}
+  finally{actionPending.current=false;setBusy(false)}
+ }
  async function login(e:React.FormEvent){
   e.preventDefault();if(actionPending.current)return;actionPending.current=true;setBusy(true);setAuthError("");
   try{
    const r=await fetch(API+"/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username,password})});
    const d=await r.json();if(!r.ok)throw Error(apiError(d,"No se pudo iniciar sesión"));
-   const data=await loadAccount(d.access_token);
-   sessionStorage.setItem("gestor_token",d.access_token);sessionStorage.setItem("gestor_username",d.username);
-   sessionVersion.current+=1;setUsername(d.username);setToken(d.access_token);setPassword("");
-   setCourses(data.courses);setItems(data.items);setLoaded(true);
+   const data=await loadAccount(d.access_token,d.username);
+   sessionStorage.setItem("gestor_token",d.access_token);sessionStorage.setItem("gestor_username",d.username.toUpperCase());
+   sessionVersion.current+=1;setUsername(d.username.toUpperCase());setToken(d.access_token);setPassword("");
+   setCourses(data.courses);setItems(data.items);setPendingReviews(data.pendingReviews);setSavedDocuments(data.savedDocuments);setLoaded(true);setNotice("");
   }catch(e){setAuthError(e instanceof Error?e.message:"Error de conexión")}
   finally{actionPending.current=false;setBusy(false)}
  }
- async function register(e:React.FormEvent){e.preventDefault();setBusy(true);setAuthError("");try{const r=await fetch(API+"/auth/register",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,username,password,password_confirmation:passwordConfirmation})});const d=await r.json();if(!r.ok)throw Error(apiError(d,"No se pudo crear la cuenta"));setUsername(d.username);setAuthMode("login");setPassword("");setPasswordConfirmation("");setNotice("Cuenta creada. Inicia sesión con tu usuario.")}catch(e){setAuthError(e instanceof Error?e.message:"Error de conexión")}finally{setBusy(false)}}
- async function addCourse(e:React.FormEvent){e.preventDefault();setBusy(true);try{await request("/courses",{method:"POST",body:JSON.stringify({name:newCourse})});setNewCourse("");setNotice("Curso añadido.");await refresh()}catch(e){setError(String(e))}finally{setBusy(false)}}
+ async function register(e:React.FormEvent){e.preventDefault();setBusy(true);setAuthError("");try{const r=await fetch(API+"/auth/register",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,username,password,password_confirmation:passwordConfirmation})});const d=await r.json();if(!r.ok)throw Error(apiError(d,"No se pudo crear la cuenta"));setUsername(d.username.toUpperCase());setAuthMode("login");setPassword("");setPasswordConfirmation("");setNotice("Cuenta creada. Inicia sesión con tu usuario.")}catch(e){setAuthError(e instanceof Error?e.message:"Error de conexión")}finally{setBusy(false)}}
+ async function addCourse(e:React.FormEvent){e.preventDefault();setBusy(true);setError("");setNotice("");try{await request("/courses",{method:"POST",body:JSON.stringify({name:newCourse})});setNewCourse("");setNotice("Curso añadido.");await refresh()}catch(e){setError(e instanceof Error?e.message:String(e))}finally{setBusy(false)}}
+ async function saveCourse(e:React.FormEvent){
+  e.preventDefault();if(!editingCourse)return;
+  setBusy(true);setError("");setNotice("");
+  try{
+   await request(`/courses/${editingCourse.id}`,{method:"PATCH",body:JSON.stringify({name:editingCourse.name,code:editingCourse.code||null,term:editingCourse.term||null})});
+   setEditingCourse(null);setNotice("Curso actualizado.");await refresh();
+  }catch(e){setError(e instanceof Error?e.message:String(e))}finally{setBusy(false)}
+ }
+ async function changeCourseStatus(course:Course,active:boolean):Promise<string|null>{
+  setBusy(true);setError("");setNotice("");
+  try{
+   await request(`/courses/${course.id}${active?"/activate":""}`,{method:active?"PATCH":"DELETE"});
+   if(!active&&uploadCourse===course.id)setUploadCourse("");
+   setConfirmDeactivateId("");setNotice(active?"Curso reactivado.":"Curso desactivado. Sus tareas se conservan.");await refresh();return null;
+  }catch(e){const message=e instanceof Error?e.message:String(e);setError(message);return message}finally{setBusy(false)}
+ }
+ async function deleteEmptyCourse(course:Course):Promise<string|null>{
+  if(actionPending.current)return "Espera a que termine la operación actual.";
+  actionPending.current=true;setBusy(true);setError("");setNotice("");
+  const version=sessionVersion.current;
+  try{
+   await request(`/courses/${course.id}/permanent`,{method:"DELETE"});
+   if(version!==sessionVersion.current)return "La sesión cambió. Inicia sesión de nuevo.";
+   pendingReviews.filter(review=>review.course_id===course.id).forEach(review=>clearReviewDraft(review.document_id,username));
+   if(reviewCourseId===course.id){
+    clearReviewDraft(docId,username);
+    setDocId("");setReviewCourseId("");setReviewFileName("");setResumeTargetId("");setProposals([]);
+    setSelectedFileName("");uploadFormRef.current?.reset();
+   }
+   setCourses(previous=>previous.filter(item=>item.id!==course.id));
+   setPendingReviews(previous=>previous.filter(review=>review.course_id!==course.id));
+   setSavedDocuments(previous=>previous.filter(document=>document.course_id!==course.id));
+   if(uploadCourse===course.id)setUploadCourse("");
+   if(courseFilter===course.id)setCourseFilter("");
+   if(panelCourseFilter===course.id)setPanelCourseFilter("");
+   setEditingCourse(null);
+   setNotice("Curso eliminado.");
+   return null;
+  }catch(e){const message=e instanceof Error?e.message:String(e);if(version===sessionVersion.current)setError(message);return message}
+  finally{actionPending.current=false;setBusy(false)}
+ }
  async function upload(e:React.FormEvent<HTMLFormElement>){
   e.preventDefault();if(actionPending.current)return;
-  actionPending.current=true;setBusy(true);setError("");setNotice("");setDocId("");setProposals([]);
+  actionPending.current=true;setBusy(true);setError("");setNotice("");
   const version=sessionVersion.current;
   const form=new FormData(e.currentTarget);
   try{
-   const result=parseAnalysis(await request("/documents/analyze",{method:"POST",body:form}));
+   const response=await request("/documents/analyze",{method:"POST",body:form});
+   const result=parseAnalysis(response);
    if(version!==sessionVersion.current)return;
-   setDocId(result.document_id);setProposals(result.proposals);
+   const review:PendingReview={...result,course_id:response.course_id||uploadCourse,filename:response.filename||selectedFileName};
+   const restored=restoreReviewDraft(review,username);
+   setDocId(restored.document_id);setReviewCourseId(restored.course_id);setReviewFileName(restored.filename);setUploadCourse(restored.course_id);
+   setResumeTargetId("");
+   setProposals([...restored.proposals].sort(compareActivityDates));
+   setPendingReviews(previous=>[restored,...previous.filter(item=>item.document_id!==restored.document_id)]);
    setNotice(result.proposals.length?"Revisa y edita las propuestas antes de guardarlas.":"No se encontraron actividades explícitas. Puedes probar con otro documento.");
   }catch(e){if(version===sessionVersion.current)setError(e instanceof Error?e.message:"No se pudo analizar")}
   finally{actionPending.current=false;setBusy(false)}
  }
  function edit(i:number,key:keyof Proposal,value:string){
-  setProposals(p=>p.map((x,n)=>n===i?{...x,[key]:key==="review_required"?value==="true":key==="due_date"?value||null:value,...(key==="due_date"&&!value?{review_required:true}:{})}:x));
+  setProposals(p=>p.map((x,n)=>n===i?{...x,[key]:key==="review_required"?value==="true":key==="due_date"?value||null:value,
+   ...(key==="due_date"&&!value?{review_required:true}:{}),
+   ...(key==="due_date"&&(!value||value>=localToday())?{status:"pending" as const}:{})}:x));
  }
  const reviewError=proposals.length?proposalError(proposals):"";
  async function confirm(){
@@ -94,40 +252,81 @@ export default function Home(){
   actionPending.current=true;setBusy(true);setError("");setNotice("");
   const version=sessionVersion.current;
   try{
-   const activities=proposals.map(({title,description,due_date,review_required})=>({title:title.trim(),description,due_date,review_required:review_required||due_date===null}));
+   const activities=proposals.map(({title,description,activity_type,due_date,review_required,status})=>({title:title.trim(),description,activity_type:activity_type||"otro",due_date,review_required:review_required||due_date===null,status:due_date&&due_date<localToday()&&status==="completed"?"completed":"pending"}));
    await request("/activities/confirm",{method:"POST",body:JSON.stringify({document_id:docId,activities})});
    if(version!==sessionVersion.current)return;
-   setProposals([]);setDocId("");setNotice("Actividades confirmadas y guardadas.");setSection("tareas");await refresh();
+   clearReviewDraft(docId,username);setPendingReviews(previous=>previous.filter(item=>item.document_id!==docId));
+   uploadFormRef.current?.reset();setUploadCourse("");setSelectedFileName("");setReviewFileName("");setReviewCourseId("");
+   setProposals([]);setDocId("");setResumeTargetId("");setNotice("Actividades confirmadas y guardadas.");await refresh();
   }catch(e){if(version===sessionVersion.current)setError(e instanceof Error?e.message:"No se pudo guardar. Tus correcciones se conservan.")}
   finally{actionPending.current=false;setBusy(false)}
  }
- async function complete(id:string){try{await request(`/activities/${id}/complete`,{method:"PATCH"});await refresh()}catch(e){setError(String(e))}}
- function logout(){clearAccount();setAuthError("")}
- if(!token)return <main className="login">
-  <div className="login-card">
-   <div className="brand-mark">A</div>
-   <p className="eyebrow">ORGANIZACIÓN ACADÉMICA</p>
-   <h1>{authMode==="login"?"Tu semestre, más claro.":"Crea tu cuenta"}</h1>
-   <p className="muted">{authMode==="login"?"Inicia sesión con tu usuario para organizar tus actividades.":"Registra tu correo y el usuario con el que entrarás al sistema."}</p>
-   <form onSubmit={authMode==="login"?login:register} className="stack">
-    {authMode==="register"&&<label>Correo electrónico<input type="email" required autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="tu@universidad.edu" maxLength={254}/></label>}
-    <label>Nombre de usuario<input type="text" required autoComplete="username" value={username} onChange={e=>setUsername(e.target.value.toLowerCase())} placeholder="tu_usuario" minLength={3} maxLength={30} pattern="[a-z0-9][a-z0-9._-]{2,29}"/><small>De 3 a 30 caracteres: letras, números, punto, guion o guion bajo.</small></label>
-    <label>Contraseña<input type="password" required autoComplete={authMode==="login"?"current-password":"new-password"} value={password} onChange={e=>setPassword(e.target.value)} minLength={authMode==="register"?8:1} maxLength={128}/></label>
-    {authMode==="register"&&<>
-     <ul className="password-rules" aria-live="polite"><Rule ok={password.length>=8} text="Al menos 8 caracteres"/><Rule ok={password.length<=128&&password.length>0} text="Hasta 128 caracteres"/><Rule ok={password.length>0&&!/^(passwordpassword|contrasenasegura|123456789012345|qwertyuiopasdfg|administrador123)$/i.test(password)} text="Evita contraseñas comunes"/><Rule ok={passwordConfirmation.length>0&&password===passwordConfirmation} text="Las contraseñas coinciden"/></ul>
-     <label>Confirmar contraseña<input type="password" required autoComplete="new-password" value={passwordConfirmation} onChange={e=>setPasswordConfirmation(e.target.value)} minLength={8} maxLength={128}/></label>
-     <small>Usa una contraseña larga y única. Puedes pegarla desde un gestor de contraseñas.</small>
-    </>}
-    <button className="primary" disabled={busy||(authMode==="register"&&(password.length<8||password.length>128||password!==passwordConfirmation))}>{busy?(authMode==="login"?"Ingresando…":"Creando cuenta…"):(authMode==="login"?"Iniciar sesión":"Crear cuenta")}</button>
-   </form>
-   {notice&&<p className="success" role="status">{notice}</p>}
-   <button className="auth-toggle" disabled={busy} onClick={()=>{setAuthMode(authMode==="login"?"register":"login");setAuthError("");setPassword("");setPasswordConfirmation("")}}>{authMode==="login"?"¿No tienes cuenta? Crear una cuenta":"¿Ya tienes cuenta? Inicia sesión"}</button>
-   <p className="fine-print">El correo se conserva para identificar tu cuenta. Iniciarás sesión con tu usuario y contraseña.</p>
-  </div>
-  {authError&&<div className="modal-backdrop" role="presentation"><section className="auth-modal" role="alertdialog" aria-modal="true" aria-labelledby="auth-error-title" aria-describedby="auth-error-message"><h2 id="auth-error-title">{authMode==="login"?"No se pudo iniciar sesión":"No se pudo completar el registro"}</h2><p id="auth-error-message">{authError}</p><button className="primary" autoFocus onClick={()=>setAuthError("")}>Entendido</button></section></div>}
- </main>;
- return <div className="layout"><aside className="sidebar"><div className="brand"><div className="brand-mark">A</div><div><b>Aula</b><small>GESTOR ACADÉMICO</small></div></div><div className="nav-label">ESPACIO DE TRABAJO</div><nav>{[["panel","▦","Panel"],["tareas","☷","Mis tareas"],["cursos","▤","Cursos"],["cargar","↑","Analizar documento"]].map(([id,icon,label])=><button key={id} className={section===id?"nav active":"nav"} onClick={()=>{setSection(id);setNotice("")}}><span>{icon}</span>{label}</button>)}</nav><div className="side-bottom"><div className="avatar">{username.slice(0,1).toUpperCase()||"E"}</div><div className="profile"><b>{username||"Estudiante"}</b><small>Cuenta personal</small></div><button className="logout" disabled={busy} onClick={logout} title="Cerrar sesión">↗</button></div></aside><main className="main"><header className="topbar"><span>Mi espacio / <b>{sectionLabel(section)}</b></span><span className="today">{new Date().toLocaleDateString("es",{weekday:"long",day:"numeric",month:"long"})}</span></header><div className="content">{error&&<div className="alert">{error}<button onClick={()=>setError("")}>×</button></div>}{notice&&<div className="success">{notice}<button onClick={()=>setNotice("")}>×</button></div>}{section==="panel"&&<><div className="welcome"><div><p className="eyebrow">VISTA GENERAL</p><h1>Buen día{username?`, ${username}`:""}.</h1><p className="muted">Aquí tienes lo importante de tus cursos.</p></div><button className="primary" onClick={()=>setSection("cargar")}>＋ Analizar documento</button></div><div className="stats"><Stat label="Pendientes" count={items.filter(x=>x.status==="pending").length} tone="blue"/><Stat label="Próximas" count={upcoming.length} tone="amber"/><Stat label="Completadas" count={items.filter(x=>x.status==="completed").length} tone="green"/></div><section className="panel"><div className="section-head"><div><h2>Próximas actividades</h2><p className="muted">Lo que viene en tu calendario académico.</p></div><button className="text-button" onClick={()=>setSection("tareas")}>Ver todas →</button></div><Filters courses={courses} courseFilter={courseFilter} setCourseFilter={setCourseFilter} from={from} setFrom={setFrom} to={to} setTo={setTo}/><ActivityList items={upcoming.slice(0,6)} courses={courses} complete={complete} loaded={loaded}/></section></>}{section==="tareas"&&<><div className="page-title"><div><p className="eyebrow">SEGUIMIENTO</p><h1>Mis tareas</h1><p className="muted">Consulta, filtra y actualiza tus actividades.</p></div></div><section className="panel"><Filters courses={courses} courseFilter={courseFilter} setCourseFilter={setCourseFilter} from={from} setFrom={setFrom} to={to} setTo={setTo}/><ActivityList items={shown} courses={courses} complete={complete} loaded={loaded}/></section></>}{section==="cursos"&&<><div className="page-title"><div><p className="eyebrow">ORGANIZACIÓN</p><h1>Mis cursos</h1><p className="muted">Administra los cursos de este periodo.</p></div></div><section className="panel"><form onSubmit={addCourse} className="inline-form"><input value={newCourse} onChange={e=>setNewCourse(e.target.value)} placeholder="Nombre del curso" required/><button className="primary" disabled={busy}>＋ Añadir curso</button></form><div className="course-list">{courses.map(c=><div className="course-card" key={c.id}><div className="course-icon">▤</div><div><b>{c.name}</b><small>{[c.code,c.term].filter(Boolean).join(" · ")||"Curso académico"}</small></div><span className="course-count">{items.filter(i=>i.course_id===c.id).length} tareas</span></div>)}{loaded&&!courses.length&&<Empty text="Aún no tienes cursos. Añade el primero arriba."/>}</div></section></>}{section==="cargar"&&<><div className="page-title"><div><p className="eyebrow">DOCUMENTOS</p><h1>Analizar documento</h1><p className="muted">La IA propone actividades para que las revises antes de guardar.</p></div></div><section className="panel upload-panel"><form onSubmit={upload} className="stack"><fieldset disabled={busy} className="upload-fields"><label>Curso<select name="course_id" required value={uploadCourse} onChange={e=>setUploadCourse(e.target.value)}><option value="">Selecciona un curso</option>{courses.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label><label className="dropzone"><span className="upload-icon">↑</span><b>Selecciona un PDF</b><small>PDF con texto seleccionable · máximo 15 MB</small><input name="file" type="file" accept="application/pdf,.pdf" required/></label><button className="primary" disabled={busy||!courses.length}>{busy?"Analizando documento…":"Analizar con IA"}</button></fieldset></form>{proposals.length>0&&<div className="review"><div className="section-head"><div><h2>Revisa las propuestas</h2><p className="muted">Corrige los datos o descarta una actividad antes de confirmar.</p></div></div>{proposals.map((p,i)=><fieldset className="proposal" key={i} disabled={busy}><input aria-label="Título" required maxLength={240} value={p.title} onChange={e=>edit(i,"title",e.target.value)}/><textarea aria-label="Descripción" maxLength={5000} value={p.description} onChange={e=>edit(i,"description",e.target.value)}/>{p.source_excerpt&&<blockquote className="source-excerpt"><small>Fragmento del documento</small><p>{p.source_excerpt}</p></blockquote>}<div className="proposal-fields"><label>Fecha<input type="date" value={p.due_date||""} onChange={e=>edit(i,"due_date",e.target.value)}/></label><label className="check"><input type="checkbox" disabled={!p.due_date} checked={p.review_required} onChange={e=>edit(i,"review_required",String(e.target.checked))}/> Revisar fecha/datos</label><button className="remove" onClick={()=>setProposals(proposals.filter((_,n)=>n!==i))}>Descartar</button></div></fieldset>)}{reviewError&&<p role="alert" className="error">{reviewError}</p>}<button className="primary" disabled={busy||!docId||!proposals.length||!!reviewError} onClick={confirm}>Confirmar y guardar {proposals.length} actividades</button></div>}</section></>}</div></main></div>
+ async function mutateActivity(id:string,method:"PATCH"|"DELETE",data?:Proposal,suffix="",message="Actividad actualizada."):Promise<string|null>{
+  if(actionPending.current)return "Espera a que termine la operación actual.";
+  actionPending.current=true;setBusy(true);setError("");
+  const version=sessionVersion.current;
+  try{
+   const updated=await request(`/activities/${id}${suffix?`/${suffix}`:""}`,{method,...(data?{body:JSON.stringify(data)}:{})});
+   if(version!==sessionVersion.current)return "La sesión cambió. Inicia sesión de nuevo.";
+   const removedDocumentId=method==="DELETE"?items.find(item=>item.id===id)?.document_id:null;
+   setItems(previous=>method==="DELETE"?previous.filter(item=>item.id!==id):previous.map(item=>item.id===id?updated:item));
+   if(removedDocumentId)setSavedDocuments(previous=>previous.map(document=>document.document_id===removedDocumentId?
+    {...document,activity_count:document.activity_count-1}:document).filter(document=>document.activity_count>0));
+   setNotice(message);return null;
+  }catch(e){const message=e instanceof Error?e.message:String(e);if(version===sessionVersion.current)setError(message);return message}
+  finally{actionPending.current=false;setBusy(false)}
+ }
+ async function createManualActivity(courseId:string,values:Proposal):Promise<string|null>{
+  if(actionPending.current)return "Espera a que termine la operación actual.";
+  actionPending.current=true;setBusy(true);setError("");
+  const version=sessionVersion.current;
+  try{
+   const {title,description,activity_type,due_date,review_required,status}=values;
+   const created=await request("/activities",{method:"POST",body:JSON.stringify({course_id:courseId,title,description,
+    activity_type:activity_type||"otro",due_date,review_required,status:status||"pending"})});
+   if(version!==sessionVersion.current)return "La sesión cambió. Inicia sesión de nuevo.";
+   setItems(previous=>[created,...previous]);
+   setCourseFilter("");setTypeFilter("");setFrom("");setTo("");
+   setNotice("Tarea añadida.");return null;
+  }catch(e){const message=e instanceof Error?e.message:"No se pudo añadir la tarea.";if(version===sessionVersion.current)setError(message);return message}
+  finally{actionPending.current=false;setBusy(false)}
+ }
+ async function complete(id:string){await mutateActivity(id,"PATCH",undefined,"complete","Actividad marcada como hecha.")}
+ async function reopen(id:string){await mutateActivity(id,"PATCH",undefined,"reopen","Actividad devuelta a pendientes.")}
+ function cancelLogout(){
+  if(busy)return;
+  setLogoutError("");
+  logoutDialogRef.current?.close();setLogoutOpen(false);logoutButtonRef.current?.focus();
+ }
+ async function logout(){
+  if(actionPending.current)return;
+  actionPending.current=true;setBusy(true);setError("");setLogoutError("");
+  try{
+   await request("/auth/logout",{method:"POST"});
+   logoutDialogRef.current?.close();setLogoutOpen(false);clearAccount();setAuthError("");
+  }catch(e){setLogoutError(e instanceof Error?e.message:"No se pudo cerrar la sesión. Inténtalo de nuevo.")}
+  finally{actionPending.current=false;setBusy(false)}
+ }
+ if(!token)return <AuthPage
+  authMode={authMode} email={email} setEmail={setEmail}
+  username={username} setUsername={setUsername}
+  password={password} setPassword={setPassword}
+  passwordConfirmation={passwordConfirmation} setPasswordConfirmation={setPasswordConfirmation}
+  busy={busy} authError={authError} authErrorId={authErrorId}
+  notice={notice} noticeId={noticeId}
+  onLogin={login} onRegister={register}
+  onToggleMode={()=>{setAuthMode(authMode==="login"?"register":"login");setAuthError("");setPassword("");setPasswordConfirmation("")}}
+  onClearAuthError={()=>setAuthError("")} onClearNotice={()=>setNotice("")}
+ />;
+ return <div className="layout"><dialog ref={logoutDialogRef} className="logout-dialog" aria-labelledby="logout-dialog-title" aria-describedby="logout-dialog-description" onCancel={e=>{e.preventDefault();cancelLogout()}}><h2 id="logout-dialog-title">¿Cerrar sesión?</h2><p id="logout-dialog-description">Volverás a la pantalla de acceso.</p>{logoutError&&<p className="error" role="alert">{logoutError}</p>}<div className="logout-dialog-actions"><button type="button" className="logout-cancel" autoFocus disabled={busy} onClick={cancelLogout}>Cancelar</button><button type="button" className="primary" disabled={busy} onClick={logout}>{busy?"Cerrando sesión…":"Confirmar"}</button></div></dialog><div className="toast-stack">{error&&<Toast key={`error-${errorId}`} kind="error" message={error} onClose={()=>setError("")}/>} {notice&&<Toast key={`notice-${noticeId}`} kind="success" message={notice} onClose={()=>setNotice("")}/>}</div><aside className="sidebar">
+ <div className="brand"><SidebarIcon name="brand"/><b>Tarevia</b></div>
+ <nav aria-label="Navegación principal">{NAV_ITEMS.map(({id,label})=><button key={id} className={section===id?"nav active":"nav"} aria-current={section===id?"page":undefined} onClick={()=>{setSection(id);if(id==="tareas")setTaskView("board");setNotice("")}}><SidebarIcon name={id}/><span>{label}</span></button>)}</nav>
+ <div className="side-bottom"><UserPreferencesMenu username={username} /><button ref={logoutButtonRef} className="logout" disabled={busy} onClick={()=>{setLogoutError("");setLogoutOpen(true)}}><SidebarIcon name="logout"/><span>Cerrar sesión</span></button></div>
+ </aside><main className="main"><div className="content">
+ {section==="panel"&&<PanelPage items={items} upcoming={upcoming} overdue={overdue} undated={undated} busy={busy} filters={{courses,courseFilter:panelCourseFilter,setCourseFilter:setPanelCourseFilter,typeFilter:panelTypeFilter,setTypeFilter:setPanelTypeFilter}} loaded={loaded} complete={complete} onAnalyze={()=>setSection("cargar")} onShowAll={()=>{setTaskView("list");setSection("tareas")}}/>}
+ {section==="tareas"&&<TasksPage items={shown} filters={{courses,courseFilter,setCourseFilter,typeFilter,setTypeFilter,from,setFrom,to,setTo}} loaded={loaded} busy={busy} view={taskView} onChangeView={setTaskView} complete={complete} reopen={reopen} onSave={(id,values)=>mutateActivity(id,"PATCH",values)} onCreate={createManualActivity} onDelete={id=>mutateActivity(id,"DELETE",undefined,"","Actividad borrada.")} onCourses={()=>setSection("cursos")}/>}
+ {section==="calendario"&&<CalendarPage items={items} courses={courses} loaded={loaded} busy={busy} complete={complete} reopen={reopen}/>}
+ {section==="cursos"&&<CoursesPage courses={courses} items={items} loaded={loaded} busy={busy} newCourse={newCourse} setNewCourse={setNewCourse} editingCourse={editingCourse} setEditingCourse={setEditingCourse} confirmDeactivateId={confirmDeactivateId} setConfirmDeactivateId={setConfirmDeactivateId} onAdd={addCourse} onSave={saveCourse} onChangeStatus={changeCourseStatus} onDeleteEmpty={deleteEmptyCourse}/>}
+ {section==="cargar"&&<AnalyzePage pendingReviews={pendingReviews.filter(review=>review.document_id!==docId)} savedDocuments={savedDocuments} deleteSavedError={deleteSavedError} onClearSavedDeleteError={()=>setDeleteSavedError("")} reviewFileName={reviewFileName} onResumeReview={resumeReview} onDeleteReview={deleteReview} onDeleteSavedDocument={deleteSavedDocument} reviewRef={reviewRef} uploadFormRef={uploadFormRef} courses={courses} activeCourses={activeCourses} uploadCourse={uploadCourse} setUploadCourse={setUploadCourse} selectedFileName={selectedFileName} setSelectedFileName={setSelectedFileName} busy={busy} proposals={proposals} setProposals={setProposals} docId={docId} reviewError={reviewError} onUpload={upload} onEdit={edit} onConfirm={confirm} onCourses={()=>setSection("cursos")}/>}
+ </div></main></div>
 }
-function sectionLabel(s:string){return ({panel:"Panel",tareas:"Mis tareas",cursos:"Cursos",cargar:"Analizar documento"} as Record<string,string>)[s]||s}function Stat({label,count,tone}:{label:string;count:number;tone:string}){return <div className="stat"><span className={`dot ${tone}`}/><span>{label}</span><b>{count}</b></div>}function Filters({courses,courseFilter,setCourseFilter,from,setFrom,to,setTo}:{courses:Course[];courseFilter:string;setCourseFilter:(v:string)=>void;from:string;setFrom:(v:string)=>void;to:string;setTo:(v:string)=>void}){return <div className="filters"><label>Curso<select value={courseFilter} onChange={e=>setCourseFilter(e.target.value)}><option value="">Todos los cursos</option>{courses.map(c=><option value={c.id} key={c.id}>{c.name}</option>)}</select></label><label>Desde<input type="date" value={from} onChange={e=>setFrom(e.target.value)}/></label><label>Hasta<input type="date" value={to} onChange={e=>setTo(e.target.value)}/></label><button className="clear" onClick={()=>{setCourseFilter("");setFrom("");setTo("")}}>Limpiar</button>{from&&to&&from>to&&<p className="error" role="alert">La fecha inicial debe ser anterior o igual a la final.</p>}</div>}function ActivityList({items,courses,complete,loaded}:{items:Activity[];courses:Course[];complete:(id:string)=>void;loaded:boolean}){if(!loaded)return <div className="empty">Cargando tus actividades…</div>;if(!items.length)return <Empty text="No hay actividades para mostrar con estos filtros."/>;return <div className="activity-list">{items.map(a=><article className="activity" key={a.id}><button className={a.status==="completed"?"checkmark done":"checkmark"} onClick={()=>a.status!=="completed"&&complete(a.id)} aria-label="Marcar como completada">{a.status==="completed"?"✓":""}</button><div className="activity-body"><b className={a.status==="completed"?"finished":""}>{a.title}</b><p>{a.description||"Sin descripción"}</p><small>{courses.find(c=>c.id===a.course_id)?.name||"Curso"}{a.review_required&&<em>Revisar</em>}</small></div><div className="due">{a.due_date?new Date(a.due_date+"T12:00:00").toLocaleDateString("es",{day:"numeric",month:"short"}):"Sin fecha"}</div></article>)}</div>}function Empty({text}:{text:string}){return <div className="empty"><span>✓</span><b>Todo despejado</b><p>{text}</p></div>}
-
-function Rule({ok,text}:{ok:boolean;text:string}){return <li className={ok?"rule-ok":"rule-pending"}><span aria-hidden="true">{ok?"✓":"○"}</span>{text}</li>}

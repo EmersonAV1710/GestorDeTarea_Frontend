@@ -1,7 +1,11 @@
+import { ACTIVITY_TYPES, type ActivityType } from "./activityTypes";
+
 export type Proposal = {
+  activity_type?: ActivityType;
   title: string;
   description: string;
   due_date: string | null;
+  status?: "pending" | "completed";
   review_required: boolean;
   source_excerpt?: string;
 };
@@ -17,12 +21,16 @@ export function proposalError(proposals: Proposal[]): string {
   for (let i = 0; i < proposals.length; i++) {
     const p = proposals[i];
     const label = `Actividad ${i + 1}: `;
+    if (p.activity_type !== undefined && !ACTIVITY_TYPES.some(type => type.value === p.activity_type))
+      return label + "selecciona un tipo de entrega válido.";
     if (typeof p.title !== "string" || !p.title.trim() || Array.from(p.title.trim()).length > 240)
       return label + "el título debe tener entre 1 y 240 caracteres.";
     if (typeof p.description !== "string" || Array.from(p.description).length > 5000)
       return label + "la descripción debe tener hasta 5000 caracteres.";
     if (p.due_date !== null && (typeof p.due_date !== "string" || !validDate(p.due_date)))
       return label + "ingresa una fecha válida o déjala vacía.";
+    if (p.status !== undefined && p.status !== "pending" && p.status !== "completed")
+      return label + "selecciona un estado válido.";
     if (typeof p.review_required !== "boolean") return label + "indica si necesita revisión.";
   }
   return "";
@@ -40,7 +48,7 @@ export function parseAnalysis(value: unknown): {document_id: string; proposals: 
     const problem = proposalError([p]);
     if (problem || (p.source_excerpt !== undefined && typeof p.source_excerpt !== "string"))
       throw Error(problem || "El fragmento de origen no es válido.");
-    return {...p, title: p.title.trim(), review_required: p.review_required || p.due_date === null};
+    return {...p, activity_type: p.activity_type || "otro", title: p.title.trim(), status: p.status || "pending", review_required: p.review_required || p.due_date === null};
   });
   return {document_id: body.document_id, proposals};
 }
