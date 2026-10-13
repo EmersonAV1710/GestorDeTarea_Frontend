@@ -2,6 +2,7 @@
 @import "@fontsource/inter/500.css";
 @import "@fontsource/inter/600.css";
 @import "@fontsource/inter/700.css";
+@import "@fontsource/poppins/400.css";
 @import "@fontsource/poppins/500.css";
 @import "@fontsource/poppins/600.css";
 @import "@fontsource/poppins/700.css";
@@ -18,9 +19,9 @@
   --accent: #0D2A45;
   --accent-hover: #071F35;
   --accent-soft: #e9f0f8;
-  --nav-active-bg: #193a5e;
-  --nav-hover-bg: #243b53;
-  --nav-selected-ink: #f2f5f9;
+  --nav-active-bg: #2A567F;
+  --nav-hover-bg: #305B83;
+  --nav-selected-ink: #FFFFFF;
   --green: #287154;
   --red: #a4433d;
   --control-line: #A9B8C8;
@@ -29,10 +30,11 @@
   --subtle-surface: #FFFFFF;
   --upload-surface: #F1F5F9;
   --upload-border: #A1AFBF;
-  --primary-ink: #ffffff;
-  --primary-bg: var(--accent);
-  --primary-hover: var(--accent-hover);
-  --primary-border: var(--accent);
+  --primary-ink: #FFFFFF;
+  --primary-bg: #2A567F;
+  --primary-hover: #21496F;
+  --primary-border: #2A567F;
+  --primary-hover-border: #21496F;
   --secondary-bg: #FFFFFF;
   --secondary-hover: #EEF3F8;
   --secondary-border: #B7C4D2;
@@ -47,6 +49,11 @@
   --danger-ink: #b91c1c;
   --danger-hover-bg: #fee2e2;
   --danger-hover-border: #ef4444;
+  --danger-button-bg: #EFF1F3;
+  --danger-button-hover: #E5E9ED;
+  --danger-button-border: #C7CDD4;
+  --danger-button-hover-border: #AEB8C2;
+  --danger-button-ink: #8D2E2E;
   --login-start: #F8FAFC;
   --login-end: #F8FAFC;
   --decor-line: #1e416b12;
@@ -76,10 +83,10 @@
   --upload-surface: #262626;
   --upload-border: #858585;
   --primary-ink: #f4f7fb;
-  --primary-bg: #315c85;
-  --primary-hover: #3b6b99;
-  --primary-border: #436c93;
-  --primary-hover-border: #527ca4;
+  --primary-bg: #3374B5;
+  --primary-hover: #28669F;
+  --primary-border: #3374B5;
+  --primary-hover-border: #28669F;
   --secondary-bg: #333333;
   --secondary-hover: #3d3d3d;
   --secondary-border: #494949;
@@ -95,6 +102,11 @@
   --danger-ink: #f5a3aa;
   --danger-hover-bg: #4c252d;
   --danger-hover-border: #d65b67;
+  --danger-button-bg: #383B40;
+  --danger-button-hover: #44484D;
+  --danger-button-border: #5B6067;
+  --danger-button-hover-border: #717780;
+  --danger-button-ink: #F0AAA5;
   --login-start: #292929;
   --login-end: #242424;
   --decor-line: #ffffff0c;
@@ -166,7 +178,7 @@ nav { display: grid; gap: 7px; }
 .logout { display: flex; align-items: center; justify-content: flex-start; gap: 14px; grid-column: 1 / -1; width: 100%; min-height: 48px; padding: 10px 17px; border: 1px solid var(--control-line); border-radius: 8px; background: var(--surface); color: var(--ink); font-size: .9rem; font-weight: 600; text-align: left; }
 .logout svg { flex: none; width: 20px; height: 20px; }
 .logout:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); background: var(--hover-surface); }
-.logout-dialog { width: min(420px, calc(100vw - 32px)); max-width: none; margin: auto; padding: 28px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); box-shadow: 0 20px 60px #10233e26; }
+.logout-dialog { width: min(420px, calc(100vw - 32px)); max-width: none; margin: auto; padding: 30px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--ink); font-family: var(--font-heading); line-height: 1.5; box-shadow: 0 24px 64px #10233e26; }
 .logout-dialog::backdrop { background: var(--dialog-backdrop); }
 .logout-dialog h2 { font-size: 1.18rem; }
 .logout-dialog p { margin: 11px 0 25px; color: var(--muted); font-size: .94rem; }
@@ -271,9 +283,9 @@ fieldset:disabled { opacity: .7; }
 
 .error { padding: 11px 13px; border-radius: 8px; background: var(--error-bg); color: var(--error-ink); font-size: .86rem; line-height: 1.5; }
 .toast-stack { position: fixed; top: 20px; right: 20px; z-index: 20; display: grid; justify-items: end; gap: 8px; width: min(320px, calc(100vw - 24px)); pointer-events: none; }
-.toast { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; width: fit-content; min-width: 200px; max-width: 100%; min-height: 48px; padding: 7px 8px 7px 12px; border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 10px; background: var(--surface); color: var(--ink); box-shadow: 0 8px 22px #14274314; font-size: .84rem; line-height: 1.4; pointer-events: auto; animation: toast-enter .18s ease-out; }
+.toast { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; width: fit-content; min-width: 200px; max-width: 100%; min-height: 52px; padding: 8px 9px 8px 14px; border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 12px; background: var(--surface); color: var(--ink); box-shadow: 0 10px 28px #14274314; font-family: var(--font-heading); font-size: .84rem; line-height: 1.5; pointer-events: auto; animation: toast-enter .18s ease-out; }
 .toast p { min-width: 0; margin: 7px 0; }
-.toast button { display: grid; flex: none; place-items: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-family: var(--font-body); font-size: 1.25rem; font-weight: 400; line-height: 1; }
+.toast button { display: grid; flex: none; place-items: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-family: var(--font-heading); font-size: 1.25rem; font-weight: 400; line-height: 1; }
 .toast button:hover { background: var(--accent-soft); color: var(--accent); }
 .toast-success { border-left-color: var(--green); }
 .toast-error { border-left-color: var(--red); }
@@ -317,6 +329,12 @@ fieldset:disabled { opacity: .7; }
 .login-card .stack { margin-bottom: 0; }
 .login-card .primary { width: 100%; margin-top: 3px; }
 .login-card small { color: var(--muted); font-size: .76rem; font-weight: 400; line-height: 1.45; }
+.password-field { display: grid; gap: 7px; }
+.password-field > label { color: var(--label); font-size: .84rem; font-weight: 600; }
+.password-control { position: relative; }
+.password-control input { padding-right: 94px; }
+.password-visibility { position: absolute; top: 50%; right: 6px; transform: translateY(-50%); min-width: 76px; min-height: 34px; padding: 5px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--accent); font-size: .82rem; font-weight: 600; }
+.password-visibility:hover { background: var(--accent-soft); }
 .password-rules { display: grid; gap: 5px; margin: -5px 0 0; padding: 0; color: var(--muted); font-size: .78rem; list-style: none; }
 .password-rules li { display: flex; align-items: center; gap: 8px; }
 .password-rule-check { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; flex-shrink: 0; border: 1px solid var(--line); border-radius: 4px; }
@@ -459,6 +477,7 @@ fieldset:disabled { opacity: .7; }
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--surface);
+  font-family: var(--font-heading);
   box-shadow: 0 8px 24px #00000026;
 }
 .user-preferences-menu p { margin: 2px 8px 6px; color: var(--muted); font-size: .75rem; font-weight: 600; }
@@ -589,7 +608,8 @@ fieldset:disabled { opacity: .7; }
   .task-edit-fields { grid-template-columns: minmax(0, 1fr); }
 }
 
-.calendar-filter-panel { margin-bottom: 20px; padding: 16px 0; border-bottom: 1px solid var(--line); }
+.page-title.calendar-page-title { margin-bottom: 8px; }
+.calendar-filter-panel { margin-bottom: 20px; padding: 12px 0 16px; border-bottom: 1px solid var(--line); }
 .calendar-filters { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; align-items: end; gap: 16px; }
 .calendar-filters label { display: grid; gap: 7px; color: var(--label); font-size: .84rem; font-weight: 600; }
 .calendar-panel { padding: 22px; min-width: 0; }
@@ -669,8 +689,9 @@ fieldset:disabled { opacity: .7; }
   text-align: center;
 }
 .action-button:hover:not(:disabled) { background: var(--secondary-hover); border-color: var(--secondary-hover-border, var(--accent)); }
-.action-button.action-button-danger { background: var(--danger-bg); border-color: var(--danger-border); color: var(--danger-ink); }
-.action-button.action-button-danger:hover:not(:disabled) { background: var(--danger-hover-bg); border-color: var(--danger-hover-border); }
+.action-button.action-button-danger { background: var(--danger-button-bg); border-color: var(--danger-button-border); color: var(--danger-button-ink); }
+.action-button.action-button-danger:hover:not(:disabled) { background: var(--danger-button-hover); border-color: var(--danger-button-hover-border); }
+.course-status-confirm { min-height: 46px; padding: 10px 18px; font-size: .94rem; }
 
 .task-board .task-column { min-height: 250px; }
 .task-column.is-drop-target { outline: 2px dashed var(--focus); outline-offset: 3px; background: var(--accent-soft); }
@@ -733,7 +754,8 @@ fieldset:disabled { opacity: .7; }
 .pending-review-actions { display: flex; align-items: center; gap: 8px; }
 .review-filename { margin: 6px 0; overflow-wrap: anywhere; color: var(--ink); font-size: .9rem; }
 .panel-task-group { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); }
-.panel-task-group h3 { margin: 0; font-size: 1rem; }
+.panel-task-group h3 { margin: 0; font-size: 1rem; font-weight: 500; }
+.panel-task-group .task-count { font-weight: 500; }
 @media (max-width: 600px) {
   .pending-review { align-items: flex-start; flex-direction: column; gap: 10px; }
 }

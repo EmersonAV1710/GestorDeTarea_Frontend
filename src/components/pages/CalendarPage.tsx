@@ -48,7 +48,7 @@ export function CalendarPage({ items, courses, loaded, busy, complete, reopen }:
   }
 
   return <>
-    <div className="page-title"><div><h1>Calendario</h1><p className="muted">Consulta las fechas de tus tareas, proyectos y exámenes.</p></div></div>
+    <div className="page-title calendar-page-title"><div><h1>Calendario</h1><p className="muted">Consulta las fechas de tus tareas, proyectos y exámenes.</p></div></div>
     <section className="calendar-filter-panel" aria-label="Filtros del calendario">
       <div className="calendar-filters">
         <label>Curso<select value={courseFilter} onChange={event => setCourseFilter(event.target.value)}><option value="">Todos los cursos</option>{courses.map(course => <option key={course.id} value={course.id}>{course.name}</option>)}</select></label>

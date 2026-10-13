@@ -17,4 +17,4 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Abre `http://localhost:3000`. Arranca primero la API según el README del backend y crea una cuenta privada local con su comando documentado. Sin iniciar API se verá un mensaje de conexión; el análisis real necesita `OPENAI_API_KEY` configurada solo en backend. Se admiten PDF, Word `.docx` y TXT hasta 15 MB; el análisis no guarda propuestas hasta confirmar.
+Abre `http://localhost:3000`. Arranca primero la API según el README del backend y crea una cuenta privada local con su comando documentado. Sin iniciar API se verá un mensaje de conexión; el análisis real necesita `GEMINI_API_KEY` configurada solo en backend. Se admiten PDF con texto seleccionable, Word `.docx` y TXT hasta 15 MB; el análisis no guarda propuestas hasta confirmar.

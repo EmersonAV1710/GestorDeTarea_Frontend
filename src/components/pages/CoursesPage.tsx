@@ -66,7 +66,7 @@ export function CoursesPage({ courses, items, loaded, busy, newCourse, setNewCou
       {confirmationError && <div className="error" role="alert">{confirmationError}</div>}
       <div className="logout-dialog-actions">
         <button type="button" className="logout-cancel" autoFocus disabled={busy} onClick={cancel}>Cancelar</button>
-        <button type="button" className={deleting ? "action-button action-button-danger course-delete-confirm" : "primary"} disabled={busy} onClick={() => void confirm()}>{busy ? deleting ? "Borrando…" : "Desactivando…" : deleting ? "Confirmar borrado" : "Confirmar"}</button>
+        <button type="button" className="action-button action-button-danger course-status-confirm" disabled={busy} onClick={() => void confirm()}>{busy ? deleting ? "Borrando…" : "Desactivando…" : deleting ? "Confirmar borrado" : "Confirmar"}</button>
       </div>
     </dialog>
     <div className="page-title"><div><h1>Mis cursos</h1><p className="muted">Edita tus cursos, borra los vacíos o desactiva los que tienen tareas.</p></div></div>
