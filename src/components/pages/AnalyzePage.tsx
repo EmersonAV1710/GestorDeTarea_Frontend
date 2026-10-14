@@ -1,8 +1,9 @@
-import type { FormEvent, RefObject } from "react";
+import { useRef, useState, type DragEvent, type FormEvent, type RefObject } from "react";
 import type { PendingReview, SavedDocument } from "../../lib/reviewDraft";
 import { FileIcon } from "../FileIcon";
 import { ACTIVITY_TYPES } from "../../lib/activityTypes";
 import { localToday, type Proposal } from "../../lib/proposals";
+import { WarningIcon } from "../WarningIcon";
 import type { Course } from "../types";
 
 type Props = {
@@ -11,6 +12,8 @@ type Props = {
   deleteSavedError: string;
   onClearSavedDeleteError: () => void;
   reviewFileName: string;
+  reviewCourseId: string;
+  onChangeReviewCourse: (courseId: string) => Promise<void>;
   onResumeReview: (review: PendingReview) => void;
   onDeleteReview: (documentId: string) => void;
   onDeleteSavedDocument: (documentId: string) => Promise<boolean>;
@@ -33,15 +36,58 @@ type Props = {
   onCourses: () => void;
 };
 
-export function AnalyzePage({ pendingReviews, savedDocuments, deleteSavedError, onClearSavedDeleteError, reviewFileName, onResumeReview, onDeleteReview, onDeleteSavedDocument, reviewRef, uploadFormRef, courses, activeCourses, uploadCourse, setUploadCourse, selectedFileName, setSelectedFileName, busy, proposals, setProposals, docId, reviewError, onUpload, onEdit, onConfirm, onCourses }: Props) {
-  function removeSelectedFile(event: React.MouseEvent<HTMLButtonElement>) {
+export function assignDroppedFile(files: FileList, input: HTMLInputElement): string {
+  if (files.length !== 1) throw Error("Arrastra un solo archivo.");
+  if (!/\.(pdf|docx|txt)$/i.test(files[0].name)) throw Error("Solo se admiten archivos PDF, DOCX o TXT.");
+  input.files = files;
+  return files[0].name;
+}
+
+export function clearSelectedFile(event: React.MouseEvent<HTMLButtonElement>, input: HTMLInputElement | null, setSelectedFileName: (value: string) => void): void {
+  event.preventDefault();
+  event.stopPropagation();
+  if (input) input.value = "";
+  setSelectedFileName("");
+  input?.focus();
+}
+
+export function AnalyzePage({ pendingReviews, savedDocuments, deleteSavedError, onClearSavedDeleteError, reviewFileName, reviewCourseId, onChangeReviewCourse, onResumeReview, onDeleteReview, onDeleteSavedDocument, reviewRef, uploadFormRef, courses, activeCourses, uploadCourse, setUploadCourse, selectedFileName, setSelectedFileName, busy, proposals, setProposals, docId, reviewError, onUpload, onEdit, onConfirm, onCourses }: Props) {
+  const [draggingFile, setDraggingFile] = useState(false);
+  const [uploadFileError, setUploadFileError] = useState("");
+  const dragDepth = useRef(0);
+  function dragEnter(event: DragEvent<HTMLLabelElement>) {
+    event.preventDefault();
+    if (busy) return;
+    dragDepth.current += 1;
+    setDraggingFile(true);
+  }
+  function dragLeave(event: DragEvent<HTMLLabelElement>) {
+    event.preventDefault();
+    dragDepth.current = Math.max(0, dragDepth.current - 1);
+    if (!dragDepth.current) setDraggingFile(false);
+  }
+  function dropFile(event: DragEvent<HTMLLabelElement>) {
     event.preventDefault();
     event.stopPropagation();
+    dragDepth.current = 0;
+    setDraggingFile(false);
     if (busy) return;
     const input = uploadFormRef.current?.querySelector<HTMLInputElement>('input[type="file"]');
-    if (input) input.value = "";
-    setSelectedFileName("");
-    input?.focus();
+    if (!input) return;
+    try {
+      setSelectedFileName(assignDroppedFile(event.dataTransfer.files, input));
+      setUploadFileError("");
+    } catch (error) {
+      input.value = "";
+      setSelectedFileName("");
+      setUploadFileError(error instanceof Error ? error.message : "No se pudo seleccionar el archivo.");
+    }
+  }
+  function removeSelectedFile(event: React.MouseEvent<HTMLButtonElement>) {
+    if (busy) return;
+    const input = uploadFormRef.current?.querySelector<HTMLInputElement>('input[type="file"]');
+    clearSelectedFile(event, input || null, setSelectedFileName);
+    setUploadFileError("");
   }
 
   function selectFileForReview(review: PendingReview) {
@@ -107,11 +153,11 @@ export function AnalyzePage({ pendingReviews, savedDocuments, deleteSavedError, 
         })}
       </details>}
       <form ref={uploadFormRef} onSubmit={onUpload} className="stack"><fieldset disabled={busy} className="upload-fields">
-        <label>Curso<select name="course_id" required value={uploadCourse} onChange={event => setUploadCourse(event.target.value)}><option value="">Selecciona un curso</option>{activeCourses.map(course => <option key={course.id} value={course.id}>{course.name}</option>)}</select></label>
+        <label>Curso para el documento nuevo<select name="course_id" required value={uploadCourse} onChange={event => setUploadCourse(event.target.value)}><option value="">Selecciona un curso</option>{activeCourses.map(course => <option key={course.id} value={course.id}>{course.name}</option>)}</select></label>
         {!activeCourses.length && <p className="upload-help">Para analizar un documento <button type="button" className="text-button" onClick={onCourses}>{courses.length ? "reactiva un curso" : "añade un curso"}</button>.</p>}
-        <label className="upload-zone">
-          <span>{selectedFileName ? "Documento seleccionado" : "Selecciona un archivo PDF, DOCX o TXT"}</span>
-          <input name="file" type="file" accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" aria-label="Seleccionar archivo PDF, DOCX o TXT" onChange={event => setSelectedFileName(event.target.files?.[0]?.name || "")} required />
+        <label className={`upload-zone${draggingFile ? " is-dragging" : ""}`} onDragEnter={dragEnter} onDragOver={event => { event.preventDefault(); if (!busy) event.dataTransfer.dropEffect = "copy"; }} onDragLeave={dragLeave} onDrop={dropFile}>
+          <span>{draggingFile ? "Suelta el archivo aquí" : selectedFileName ? "Documento seleccionado" : "Selecciona o arrastra un archivo PDF, DOCX o TXT"}</span>
+          <input name="file" type="file" accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" aria-label="Seleccionar archivo PDF, DOCX o TXT" onChange={event => { setSelectedFileName(event.target.files?.[0]?.name || ""); setUploadFileError(""); }} required />
           {selectedFileName ? <span className="upload-file-card" role="status" aria-atomic="true">
             <FileIcon filename={selectedFileName} />
             <span className="upload-file-details">
@@ -124,16 +170,23 @@ export function AnalyzePage({ pendingReviews, savedDocuments, deleteSavedError, 
           <span className="upload-select-button" aria-hidden="true">{selectedFileName ? "Cambiar archivo" : "Examinar"}</span>
           <small>Texto legible · máximo 15 MB</small>
         </label>
+        {uploadFileError && <p className="error" role="alert">{uploadFileError}</p>}
         <button className="primary" disabled={busy || !activeCourses.length}>{busy ? "Analizando documento…" : "Analizar documento"}</button>
       </fieldset></form>
       {proposals.length > 0 && <section ref={reviewRef} className="review" aria-labelledby="review-heading" tabIndex={-1}>
         <div className="section-head"><div><h2 id="review-heading">Revisa las propuestas</h2>{reviewFileName && <p className="review-filename">{reviewFileName}</p>}<p className="muted">Edita o descarta antes de guardar.</p></div></div>
+        {proposals.some(proposal => proposal.year_unconfirmed && !proposal.due_date) && <p className="year-warning-summary" role="status"><WarningIcon />Hay actividades con el año sin confirmar. Revisa sus fechas antes de guardarlas.</p>}
+        {proposals.some(proposal => !proposal.year_unconfirmed && !proposal.due_date) && <p className="year-warning-summary" role="status"><WarningIcon />Hay actividades sin fecha confirmada. Revisa sus fechas antes de guardarlas.</p>}
+        <label className="review-course">Curso de esta revisión<select value={reviewCourseId} disabled={busy} onChange={event => void onChangeReviewCourse(event.target.value)}>{courses.map(course => <option key={course.id} value={course.id} disabled={!course.is_active}>{course.name}{course.is_active ? "" : " (inactivo)"}</option>)}</select></label>
         {proposals.map((proposal, index) => <fieldset className="proposal" key={index} disabled={busy}>
           <p className="proposal-heading">Propuesta {index + 1}</p>
           <input placeholder="Ej. Entrega del proyecto final" aria-label={`Título de la actividad ${index + 1}`} required maxLength={240} value={proposal.title} onChange={event => onEdit(index, "title", event.target.value)} />
           <textarea placeholder="Describe la actividad y lo que debes entregar" aria-label={`Descripción de la actividad ${index + 1}`} maxLength={5000} value={proposal.description} onChange={event => onEdit(index, "description", event.target.value)} />
+          {!proposal.due_date && !proposal.year_unconfirmed && <label>Motivo de la fecha sin confirmar<input maxLength={1000} value={proposal.date_warning_reason || ""} onChange={event => onEdit(index, "date_warning_reason", event.target.value)} /></label>}
           {proposal.source_excerpt && <blockquote className="source-excerpt"><small>Fragmento del documento</small><p>{proposal.source_excerpt}</p></blockquote>}
           {proposal.source_excerpt === "" && <p className="review-help source-unverified">Encontramos esta posible actividad, pero no pudimos localizar una cita exacta en el documento. Dejamos la fecha vacía para que revises los datos antes de guardarla.</p>}
+          {proposal.year_unconfirmed && !proposal.due_date && <p className="year-warning" role="alert"><strong><WarningIcon />Año sin confirmar</strong><span>El documento indica una fecha, pero no permite identificar el año con seguridad. Elige la fecha completa si la conoces; de lo contrario, esta actividad se guardará sin fecha y pendiente de revisión.</span></p>}
+          {!proposal.year_unconfirmed && !proposal.due_date && <p className="year-warning" role="alert"><strong><WarningIcon />Fecha sin confirmar</strong><span>Comprueba el día, el mes y el año antes de guardar. Si no los conoces, la actividad quedará sin fecha y pendiente de revisión.</span></p>}
           <div className="proposal-fields"><label>Tipo de entrega<select value={proposal.activity_type || "otro"} onChange={event => onEdit(index, "activity_type", event.target.value)}>{ACTIVITY_TYPES.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}</select></label><label>Fecha<input type="date" value={proposal.due_date || ""} onChange={event => onEdit(index, "due_date", event.target.value)} /></label><label className="check"><input type="checkbox" disabled={!proposal.due_date} checked={proposal.review_required} onChange={event => onEdit(index, "review_required", String(event.target.checked))} /> Pendiente de revisión</label><button className="remove" onClick={() => setProposals(proposals.filter((_, position) => position !== index))}>Descartar</button></div>
           {proposal.due_date && proposal.due_date < localToday() && <div className="proposal-past-date"><span>Esta fecha ya pasó. ¿Cómo quedó la actividad?</span><label>Estado<select value={proposal.status || "pending"} onChange={event => onEdit(index, "status", event.target.value)}><option value="pending">Vencida</option><option value="completed">Entregada</option></select></label></div>}
         </fieldset>)}

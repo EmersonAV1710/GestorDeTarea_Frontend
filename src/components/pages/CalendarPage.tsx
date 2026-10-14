@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { ActivityList } from "../ActivityParts";
+import { ActivityList, ResetFiltersButton } from "../ActivityParts";
 import type { Activity, Course } from "../types";
 import { ACTIVITY_TYPES, matchesActivityType } from "../../lib/activityTypes";
 import { buildMonthDays, dateKey, groupActivitiesByDate } from "../../lib/calendar";
@@ -53,7 +53,7 @@ export function CalendarPage({ items, courses, loaded, busy, complete, reopen }:
       <div className="calendar-filters">
         <label>Curso<select value={courseFilter} onChange={event => setCourseFilter(event.target.value)}><option value="">Todos los cursos</option>{courses.map(course => <option key={course.id} value={course.id}>{course.name}</option>)}</select></label>
         <label>Tipo de entrega<select value={typeFilter} onChange={event => setTypeFilter(event.target.value)}><option value="">Todos los tipos</option>{ACTIVITY_TYPES.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}</select></label>
-        <button type="button" className="clear" onClick={() => { setCourseFilter(""); setTypeFilter(""); }}>Limpiar</button>
+        <ResetFiltersButton onClick={() => { setCourseFilter(""); setTypeFilter(""); }} />
       </div>
     </section>
     {!loaded ? <div className="empty">Cargando tus actividades…</div> : <>

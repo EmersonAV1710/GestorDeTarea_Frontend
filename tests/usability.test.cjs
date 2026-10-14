@@ -13,17 +13,21 @@ const items = [
 const proposal = {title:'Entrega final',description:'Descripción',due_date:'2099-01-01',review_required:false,activity_type:'proyecto'};
 const docId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 
-function createHome(storage=new Map(), pending=[], saved=[], initialItems=items) {
+function createHome(storage=new Map(), pending=[], saved=[], initialItems=items, courseRows=courses) {
   const timers=[];
   const state=[],effectDeps=[],effects=[];let cursor=0,effectCursor=0,failUpload=false,failLogout=false,failSavedDelete=false;
   const requests=[];
   const confirmations=[];
+  const courseChanges=[];
+  const courseCreations=[];
+  const courseEdits=[];
   const manualCreations=[];
   const activityRows=[...initialItems];
   const hooks={
     useState(initial){const index=cursor++;if(!(index in state))state[index]=typeof initial==='function'?initial():initial;return[state[index],value=>{state[index]=typeof value==='function'?value(state[index]):value}];},
     useRef(initial){return hooks.useState(()=>({current:initial}))[0];},
     useMemo(fn){return fn();},
+    useId(){return 'test-id';},
     useEffect(fn,deps){const index=effectCursor++;if(!effectDeps[index]||deps.some((dep,i)=>dep!==effectDeps[index][i])){effectDeps[index]=deps;effects.push(fn);}},
   };
   class FormData {constructor(form){this.form=form;}}
@@ -32,7 +36,15 @@ function createHome(storage=new Map(), pending=[], saved=[], initialItems=items)
     fetch:async (url,init={})=>{
       const suffix=url.split('/api')[1];requests.push(suffix);let data,status=200;
       if(suffix==='/auth/login')data={access_token:'fake',username:'test'};
-      else if(suffix==='/courses')data=courses;
+      else if(suffix==='/courses'&&init.method==='POST'){
+        const body=JSON.parse(init.body);courseCreations.push(body);
+        data={...body,id:'new-course',is_active:true};
+      }
+      else if(suffix==='/courses')data=courseRows;
+      else if(suffix.startsWith('/courses/')&&init.method==='PATCH'){
+        const body=JSON.parse(init.body);courseEdits.push(body);
+        data={...body,id:suffix.split('/')[2],is_active:true};
+      }
       else if(suffix==='/activities'&&init.method==='POST'){
         const body=JSON.parse(init.body);manualCreations.push(body);
         data={...body,id:'manual-task',document_id:null};
@@ -40,6 +52,13 @@ function createHome(storage=new Map(), pending=[], saved=[], initialItems=items)
       else if(suffix==='/activities')data=activityRows;
       else if(suffix==='/documents/pending')data=pending;
       else if(suffix==='/documents')data=saved;
+      else if(suffix.startsWith('/documents/')&&init.method==='PATCH'){
+        const documentId=suffix.split('/')[2];
+        const review=pending.find(item=>item.document_id===documentId);
+        status=review?200:404;
+        data=review?{...review,course_id:JSON.parse(init.body).course_id}:{detail:'Revisión no encontrada'};
+        if(review){review.course_id=data.course_id;courseChanges.push({documentId,courseId:data.course_id});}
+      }
       else if(suffix.startsWith('/documents/')&&suffix.endsWith('/saved')&&init.method==='DELETE'){
         const documentId=suffix.split('/')[2];
         const index=saved.findIndex(document=>document.document_id===documentId);
@@ -75,13 +94,13 @@ function createHome(storage=new Map(), pending=[], saved=[], initialItems=items)
   function find(node,predicate){if(!node||typeof node!=='object')return[];return[...(predicate(node)?[node]:[]),...[node.props?.children].flat(Infinity).flatMap(child=>find(child,predicate))];}
   function page(name){return find(render(),node=>node.type?.name===name)[0];}
   function nav(label){const button=find(render(),node=>node.type==='button'&&String(node.props.className).startsWith('nav')&&node.props.children[1].props.children===label)[0];assert(button);button.props.onClick();render();}
-  return{render,page,nav,storage,pending,saved,timers,find,requests,confirmations,manualCreations,setFailLogout:value=>{failLogout=value},setFailUpload:value=>{failUpload=value},setFailSavedDelete:value=>{failSavedDelete=value}};
+  return{render,page,nav,storage,pending,saved,timers,find,flushEffects(){while(effects.length)effects.shift()()},requests,confirmations,courseChanges,courseCreations,courseEdits,manualCreations,setFailLogout:value=>{failLogout=value},setFailUpload:value=>{failUpload=value},setFailSavedDelete:value=>{failSavedDelete=value}};
 }
 
 
 
-async function loggedIn(storage, pending, saved, activities) {
-  const home=createHome(storage,pending,saved,activities);
+async function loggedIn(storage, pending, saved, activities, courseRows) {
+  const home=createHome(storage,pending,saved,activities,courseRows);
   await home.page('AuthPage').props.onLogin({preventDefault(){}});
   return home;
 }
@@ -101,6 +120,18 @@ test('panel exposes overdue and undated tasks and its filters do not affect Mis 
   assert.equal(home.page('TasksPage').props.filters.courseFilter,'');
 });
 
+test('the compact navigation opens from the three-line button and closes after choosing a section', async()=>{
+  const home=await loggedIn();
+  const toggle=()=>home.find(home.render(),node=>node.type==='button'&&node.props.className==='mobile-menu-toggle')[0];
+  assert.equal(toggle().props['aria-expanded'],false);
+  toggle().props.onClick();
+  assert.equal(toggle().props['aria-expanded'],true);
+  assert(home.find(home.render(),node=>node.props?.id==='mobile-navigation'&&node.props.className.includes('is-open')).length);
+  home.nav('Cursos');
+  assert.equal(toggle().props['aria-expanded'],false);
+  assert.equal(home.page('CoursesPage')?.type?.name,'CoursesPage');
+});
+
 test('a manual task is added directly without a document upload', async()=>{
   const home=await loggedIn();
   home.nav('Mis tareas');
@@ -111,6 +142,83 @@ test('a manual task is added directly without a document upload', async()=>{
   assert.equal(home.manualCreations[0].title,'Tarea manual');
   assert.equal('document_id' in home.manualCreations[0],false);
   assert(home.page('TasksPage').props.items.some(item=>item.id==='manual-task'));
+});
+
+test('the new course dialog sends code and term, then closes after saving', async()=>{
+  const home=await loggedIn();
+  home.nav('Cursos');
+  const renderCourses=()=>{const page=home.page('CoursesPage');return page.type(page.props)};
+  let tree=renderCourses();
+  const toggle=home.find(tree,node=>node.type==='button'&&node.props['aria-controls']==='course-create-dialog')[0];
+  const dialog=home.find(tree,node=>node.type==='dialog'&&node.props.id==='course-create-dialog')[0];
+  assert(toggle);
+  assert(dialog);
+  assert.match(realRequire('react-dom/server').renderToStaticMarkup(tree),/course-new-plus[^>]*>\+<\/span> Nuevo curso/);
+  const nativeDialog={open:false,showModal(){this.open=true},close(){this.open=false}};
+  dialog.props.ref.current=nativeDialog;
+  toggle.props.onClick();
+  tree=renderCourses();
+  home.flushEffects();
+  assert.equal(nativeDialog.open,true);
+  const html=realRequire('react-dom/server').renderToStaticMarkup(tree);
+  assert.match(html,/C[oó]digo \(opcional\)/);
+  assert.match(html,/Periodo \(opcional\)/);
+  const page=home.page('CoursesPage');
+  page.props.setNewCourse('Matemática');
+  page.props.setNewCourseCode('MAT-101');
+  page.props.setNewCourseTerm('2026-II');
+  const form=home.find(renderCourses(),node=>node.props?.className==='course-create-form')[0];
+  await form.props.onSubmit({preventDefault(){}});
+  assert.deepEqual(home.courseCreations,[{name:'Matemática',code:'MAT-101',term:'2026-II'}]);
+  const cleared=home.page('CoursesPage').props;
+  assert.equal(cleared.newCourse,'');
+  assert.equal(cleared.newCourseCode,'');
+  assert.equal(cleared.newCourseTerm,'');
+  renderCourses();
+  home.flushEffects();
+  assert.equal(nativeDialog.open,false);
+});
+
+test('editing a course opens a dialog with its values and closes after saving', async()=>{
+  const courseRows=[{id:'course',name:'Inge II',code:'ING-002',term:'2026-II',is_active:true}];
+  const home=await loggedIn(new Map(),[],[],[],courseRows);
+  home.nav('Cursos');
+  const renderCourses=()=>{const page=home.page('CoursesPage');return page.type(page.props)};
+  let tree=renderCourses();
+  const dialog=home.find(tree,node=>node.type==='dialog'&&node.props.id==='course-edit-dialog')[0];
+  const nativeDialog={open:false,showModal(){this.open=true},close(){this.open=false}};
+  dialog.props.ref.current=nativeDialog;
+  const edit=home.find(tree,node=>node.type==='button'&&node.props.children==='Editar')[0];
+  edit.props.onClick({currentTarget:{closest:()=>({querySelector:()=>({focus(){}}),removeAttribute(){}})}});
+  tree=renderCourses();
+  home.flushEffects();
+  assert.equal(nativeDialog.open,true);
+  assert.match(realRequire('react-dom/server').renderToStaticMarkup(tree),/value="ING-002"/);
+  const page=home.page('CoursesPage');
+  page.props.setEditingCourse({...page.props.editingCourse,code:'ING-003'});
+  const form=home.find(renderCourses(),node=>node.props?.className==='course-edit-form')[0];
+  await form.props.onSubmit({preventDefault(){}});
+  assert.deepEqual(home.courseEdits,[{name:'Inge II',code:'ING-003',term:'2026-II'}]);
+  renderCourses();
+  home.flushEffects();
+  assert.equal(nativeDialog.open,false);
+});
+
+test('course filters and search narrow the compact list without decorative icons', async()=>{
+  const courseRows=[{id:'one',name:'Base de Datos',code:null,term:null,is_active:true},{id:'two',name:'Inge II',code:'ING-002',term:'2026-II',is_active:false}];
+  const home=await loggedIn(new Map(),[],[],[],courseRows);
+  home.nav('Cursos');
+  const renderCourses=()=>{const page=home.page('CoursesPage');return page.type(page.props)};
+  let tree=renderCourses();
+  assert.equal(home.find(tree,node=>node.props?.className?.startsWith?.('course-card')).length,2);
+  assert.equal(home.find(tree,node=>node.type==='svg').length,0);
+  home.find(tree,node=>node.type==='button'&&node.props.children==='Inactivos')[0].props.onClick();
+  tree=renderCourses();
+  assert.equal(home.find(tree,node=>node.props?.className?.startsWith?.('course-card')).length,1);
+  assert.match(realRequire('react-dom/server').renderToStaticMarkup(tree),/ING-002/);
+  home.find(tree,node=>node.type==='input'&&node.props.type==='search')[0].props.onChange({target:{value:'Sin coincidencias'}});
+  tree=renderCourses();
+  assert.equal(home.find(tree,node=>node.props?.className?.startsWith?.('course-card')).length,0);
 });
 
 test('failed new analysis keeps the previous document and corrected proposals', async()=>{
@@ -142,6 +250,27 @@ test('pending reviews restore corrections after reload, including temporarily em
   assert.equal(reloaded.page('AnalyzePage').props.proposals[0].title,'');
   assert.match(reloaded.page('AnalyzePage').props.reviewError,/título/);
   assert.deepEqual(reveal,[['scroll','start'],['focus',true]]);
+});
+
+test('changing a resumed review course persists and survives reload', async()=>{
+  const courseRows=[...courses,{id:'other',name:'Otro curso',is_active:true}];
+  const pending=[{document_id:docId,course_id:'course',filename:'programa.txt',proposals:[{...proposal}]}];
+  const home=await loggedIn(new Map(),pending,[],items,courseRows);
+  home.nav('Analizar documento');
+  home.page('AnalyzePage').props.onResumeReview(home.page('AnalyzePage').props.pendingReviews[0]);
+  const page=home.page('AnalyzePage');
+  const html=realRequire('react-dom/server').renderToStaticMarkup(realRequire('react').createElement(page.type,page.props));
+  assert.match(html,/Curso de esta revisión/);
+  await page.props.onChangeReviewCourse('other');
+  home.render();
+  assert.equal(home.page('AnalyzePage').props.reviewCourseId,'other');
+  assert.deepEqual(home.courseChanges,[{documentId:docId,courseId:'other'}]);
+  assert.equal(pending[0].course_id,'other');
+
+  const reloaded=await loggedIn(home.storage,pending,[],items,courseRows);
+  reloaded.nav('Analizar documento');
+  reloaded.page('AnalyzePage').props.onResumeReview(reloaded.page('AnalyzePage').props.pendingReviews[0]);
+  assert.equal(reloaded.page('AnalyzePage').props.reviewCourseId,'other');
 });
 
 test('resuming a review recovers server proposals when the local draft has no activities', async()=>{

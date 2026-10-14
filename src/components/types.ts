@@ -13,11 +13,13 @@ export type Activity = {
   id: string;
   title: string;
   description: string;
+  date_warning_reason?: string;
   due_date: string | null;
   status: string;
   course_id: string;
   document_id?: string | null;
   review_required: boolean;
+  year_unconfirmed?: boolean;
 };
 
 export type FilterProps = {

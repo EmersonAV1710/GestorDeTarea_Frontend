@@ -37,7 +37,7 @@ export function AuthPage({ authMode, email, setEmail, username, setUsername, pas
       <p className="muted">{authMode === "login" ? "Accede a tus cursos y actividades." : "Crea tu cuenta para empezar."}</p>
       <form onSubmit={authMode === "login" ? onLogin : onRegister} className="stack">
         {authMode === "register" && <label>Correo electrónico<input type="email" required autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="tu@universidad.edu" maxLength={254} /></label>}
-        <label>Nombre de usuario<input type="text" required autoComplete="username" autoCapitalize="characters" value={username} onChange={event => setUsername(event.target.value.toUpperCase())} placeholder="TU_USUARIO" minLength={3} maxLength={30} pattern="[A-Z0-9][A-Z0-9._-]{2,29}" /></label>
+        <label>Nombre de usuario<input type="text" required autoComplete="username" autoCapitalize="characters" value={username} onChange={event => setUsername(event.target.value.toUpperCase())} placeholder="TU_USUARIO" minLength={3} maxLength={30} pattern="[A-Z0-9](?:[A-Z0-9._]|-){2,29}" /></label>
         <PasswordField key={authMode} id="auth-password" name="password" label="Contraseña" value={password} onChange={setPassword} autoComplete={authMode === "login" ? "current-password" : "new-password"} placeholder={authMode === "login" ? "Ingresa tu contraseña" : "Crea tu contraseña"} minLength={authMode === "register" ? 8 : 1} />
         {authMode === "register" && <>
           <ul className="password-rules" aria-live="polite">

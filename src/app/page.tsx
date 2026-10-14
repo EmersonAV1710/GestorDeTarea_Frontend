@@ -9,7 +9,7 @@ import { Toast } from "../components/Toast";
 import { SidebarIcon } from "../components/SidebarIcon";
 import { UserPreferencesMenu } from "../components/UserPreferencesMenu";
 import { AuthPage } from "../components/pages/AuthPage";
-import { PanelPage } from "../components/pages/PanelPage";
+import { PanelPage, upcomingActivities } from "../components/pages/PanelPage";
 import { TasksPage } from "../components/pages/TasksPage";
 import { CalendarPage } from "../components/pages/CalendarPage";
 import { CoursesPage } from "../components/pages/CoursesPage";
@@ -35,7 +35,7 @@ function useTimedMessage(autoClose = true) {
  return [message,update,version] as const;
 }
 export default function Home(){
- const [token,setToken]=useState(""); const [email,setEmail]=useState(""); const [username,setUsername]=useState(""); const [password,setPassword]=useState(""); const [passwordConfirmation,setPasswordConfirmation]=useState(""); const [authMode,setAuthMode]=useState<"login"|"register">("login"); const [authError,setAuthError,authErrorId]=useTimedMessage(); const [courses,setCourses]=useState<Course[]>([]); const [items,setItems]=useState<Activity[]>([]); const [courseFilter,setCourseFilter]=useState(""); const [typeFilter,setTypeFilter]=useState(""); const [from,setFrom]=useState(""); const [to,setTo]=useState(""); const [section,setSection]=useState("panel"); const [taskView,setTaskView]=useState<"board"|"list">("board"); const [logoutOpen,setLogoutOpen]=useState(false); const [busy,setBusy]=useState(false); const [error,setError,errorId]=useTimedMessage(); const [notice,setNotice,noticeId]=useTimedMessage(); const [newCourse,setNewCourse]=useState(""); const [editingCourse,setEditingCourse]=useState<Course|null>(null); const [confirmDeactivateId,setConfirmDeactivateId]=useState(""); const [uploadCourse,setUploadCourse]=useState(""); const [selectedFileName,setSelectedFileName]=useState(""); const [proposals,setProposals]=useState<Proposal[]>([]); const [docId,setDocId]=useState(""); const [loaded,setLoaded]=useState(false);
+ const [token,setToken]=useState(""); const [email,setEmail]=useState(""); const [username,setUsername]=useState(""); const [password,setPassword]=useState(""); const [passwordConfirmation,setPasswordConfirmation]=useState(""); const [authMode,setAuthMode]=useState<"login"|"register">("login"); const [authError,setAuthError,authErrorId]=useTimedMessage(); const [courses,setCourses]=useState<Course[]>([]); const [items,setItems]=useState<Activity[]>([]); const [courseFilter,setCourseFilter]=useState(""); const [typeFilter,setTypeFilter]=useState(""); const [from,setFrom]=useState(""); const [to,setTo]=useState(""); const [section,setSection]=useState("panel"); const [taskView,setTaskView]=useState<"board"|"list">("board"); const [logoutOpen,setLogoutOpen]=useState(false); const [mobileMenuOpen,setMobileMenuOpen]=useState(false); const [busy,setBusy]=useState(false); const [error,setError,errorId]=useTimedMessage(); const [notice,setNotice,noticeId]=useTimedMessage(); const [newCourse,setNewCourse]=useState(""); const [newCourseCode,setNewCourseCode]=useState(""); const [newCourseTerm,setNewCourseTerm]=useState(""); const [editingCourse,setEditingCourse]=useState<Course|null>(null); const [confirmDeactivateId,setConfirmDeactivateId]=useState(""); const [uploadCourse,setUploadCourse]=useState(""); const [selectedFileName,setSelectedFileName]=useState(""); const [proposals,setProposals]=useState<Proposal[]>([]); const [docId,setDocId]=useState(""); const [loaded,setLoaded]=useState(false);
  const [logoutError,setLogoutError]=useState("");
  const [pendingReviews,setPendingReviews]=useState<PendingReview[]>([]);
  const [savedDocuments,setSavedDocuments]=useState<SavedDocument[]>([]);
@@ -57,6 +57,21 @@ export default function Home(){
  const sessionVersion=useRef(0);
  const logoutDialogRef=useRef<HTMLDialogElement>(null);
  const logoutButtonRef=useRef<HTMLButtonElement>(null);
+ const mobileMenuButtonRef=useRef<HTMLButtonElement>(null);
+ useEffect(()=>{
+  if(!mobileMenuOpen||typeof document==="undefined")return;
+  const previousOverflow=document.body.style.overflow;
+  document.body.style.overflow="hidden";
+  return ()=>{document.body.style.overflow=previousOverflow};
+ },[mobileMenuOpen]);
+ useEffect(()=>{
+  if(!mobileMenuOpen||typeof window.matchMedia!=="function")return;
+  const mobileViewport=window.matchMedia("(max-width: 820px)");
+  const closeOnDesktop=()=>{if(!mobileViewport.matches)setMobileMenuOpen(false)};
+  mobileViewport.addEventListener("change",closeOnDesktop);
+  closeOnDesktop();
+  return ()=>mobileViewport.removeEventListener("change",closeOnDesktop);
+ },[mobileMenuOpen]);
  useEffect(()=>{
   if(section!=="cargar"||resumeTargetId!==docId||!resumeTargetId||!proposals.length||!reviewRef.current)return;
   reviewRef.current.scrollIntoView({block:"start"});
@@ -78,8 +93,8 @@ export default function Home(){
   sessionStorage.removeItem("gestor_token");sessionStorage.removeItem("gestor_username");
   setToken("");setUsername("");setEmail("");setCourses([]);setItems([]);setProposals([]);setDocId("");
   setPendingReviews([]);setSavedDocuments([]);setDeleteSavedError("");setReviewFileName("");setReviewCourseId("");setResumeTargetId("");setPanelCourseFilter("");setPanelTypeFilter("");
-  setUploadCourse("");setSelectedFileName("");setCourseFilter("");setTypeFilter("");setFrom("");setTo("");setNewCourse("");setEditingCourse(null);setConfirmDeactivateId("");
-  setLoaded(false);setSection("panel");setTaskView("board");setLogoutOpen(false);setNotice("");setError("");setPassword("");setPasswordConfirmation("");
+  setUploadCourse("");setSelectedFileName("");setCourseFilter("");setTypeFilter("");setFrom("");setTo("");setNewCourse("");setNewCourseCode("");setNewCourseTerm("");setEditingCourse(null);setConfirmDeactivateId("");
+  setLoaded(false);setSection("panel");setTaskView("board");setLogoutOpen(false);setMobileMenuOpen(false);setNotice("");setError("");setPassword("");setPasswordConfirmation("");
  }
  const request=async(path:string,init:RequestInit={})=>{
   const version=sessionVersion.current;
@@ -123,7 +138,7 @@ export default function Home(){
  const shown=useMemo(()=>from&&to&&from>to?[]:items.filter(x=>matchesActivityType(x.activity_type,typeFilter)&&(!courseFilter||x.course_id===courseFilter)&&(!from||!!x.due_date&&x.due_date>=from)&&(!to||!!x.due_date&&x.due_date<=to)),[items,courseFilter,typeFilter,from,to]);
  const activeCourses=courses.filter(c=>c.is_active);
  const panelShown=items.filter(x=>matchesActivityType(x.activity_type,panelTypeFilter)&&(!panelCourseFilter||x.course_id===panelCourseFilter));
- const upcoming=panelShown.filter(x=>x.status==="pending"&&x.due_date&&x.due_date>=localToday()).sort(compareActivityDates);
+ const upcoming=upcomingActivities(panelShown);
  const overdue=panelShown.filter(x=>x.status==="pending"&&x.due_date&&x.due_date<localToday()).sort(compareActivityDates);
  const undated=panelShown.filter(x=>x.status==="pending"&&!x.due_date);
  function resumeReview(review:PendingReview){
@@ -133,6 +148,20 @@ export default function Home(){
   setDocId(restored.document_id);setReviewCourseId(restored.course_id);setReviewFileName(restored.filename);
   setResumeTargetId(restored.document_id);
   setProposals([...restored.proposals].sort(compareActivityDates));setError("");setNotice("Revisión lista para continuar.");
+ }
+ async function changeReviewCourse(courseId:string){
+  if(actionPending.current||!docId||courseId===reviewCourseId)return;
+  actionPending.current=true;setBusy(true);setError("");
+  const version=sessionVersion.current;
+  const documentId=docId;
+  try{
+   const updated=await request(`/documents/${documentId}`,{method:"PATCH",body:JSON.stringify({course_id:courseId})});
+   if(version!==sessionVersion.current)return;
+   if(updated.document_id!==documentId||updated.course_id!==courseId)throw Error("El servidor no confirmó el cambio de curso.");
+   setReviewCourseId(courseId);
+   setNotice("Curso de la revisión actualizado.");
+  }catch(e){if(version===sessionVersion.current)setError(e instanceof Error?e.message:"No se pudo cambiar el curso de la revisión.")}
+  finally{actionPending.current=false;setBusy(false)}
  }
  async function deleteReview(documentId:string){
   if(actionPending.current)return;
@@ -178,7 +207,7 @@ export default function Home(){
   finally{actionPending.current=false;setBusy(false)}
  }
  async function register(e:React.FormEvent){e.preventDefault();setBusy(true);setAuthError("");try{const r=await fetch(API+"/auth/register",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,username,password,password_confirmation:passwordConfirmation})});const d=await r.json();if(!r.ok)throw Error(apiError(d,"No se pudo crear la cuenta"));setUsername(d.username.toUpperCase());setAuthMode("login");setPassword("");setPasswordConfirmation("");setNotice("Cuenta creada. Inicia sesión con tu usuario.")}catch(e){setAuthError(e instanceof Error?e.message:"Error de conexión")}finally{setBusy(false)}}
- async function addCourse(e:React.FormEvent){e.preventDefault();setBusy(true);setError("");setNotice("");try{await request("/courses",{method:"POST",body:JSON.stringify({name:newCourse})});setNewCourse("");setNotice("Curso añadido.");await refresh()}catch(e){setError(e instanceof Error?e.message:String(e))}finally{setBusy(false)}}
+ async function addCourse(e:React.FormEvent):Promise<boolean>{e.preventDefault();setBusy(true);setError("");setNotice("");try{await request("/courses",{method:"POST",body:JSON.stringify({name:newCourse,code:newCourseCode||null,term:newCourseTerm||null})});setNewCourse("");setNewCourseCode("");setNewCourseTerm("");setNotice("Curso añadido.");await refresh();return true}catch(e){setError(e instanceof Error?e.message:String(e));return false}finally{setBusy(false)}}
  async function saveCourse(e:React.FormEvent){
   e.preventDefault();if(!editingCourse)return;
   setBusy(true);setError("");setNotice("");
@@ -241,6 +270,7 @@ export default function Home(){
  }
  function edit(i:number,key:keyof Proposal,value:string){
   setProposals(p=>p.map((x,n)=>n===i?{...x,[key]:key==="review_required"?value==="true":key==="due_date"?value||null:value,
+   ...(key==="due_date"&&value?{year_unconfirmed:false,date_warning_reason:""}:{}),
    ...(key==="due_date"&&!value?{review_required:true}:{}),
    ...(key==="due_date"&&(!value||value>=localToday())?{status:"pending" as const}:{})}:x));
  }
@@ -252,7 +282,7 @@ export default function Home(){
   actionPending.current=true;setBusy(true);setError("");setNotice("");
   const version=sessionVersion.current;
   try{
-   const activities=proposals.map(({title,description,activity_type,due_date,review_required,status})=>({title:title.trim(),description,activity_type:activity_type||"otro",due_date,review_required:review_required||due_date===null,status:due_date&&due_date<localToday()&&status==="completed"?"completed":"pending"}));
+   const activities=proposals.map(({title,description,date_warning_reason,activity_type,due_date,review_required,year_unconfirmed,status})=>({title:title.trim(),description,date_warning_reason:due_date?"":date_warning_reason||"",activity_type:activity_type||"otro",due_date,review_required:review_required||due_date===null,year_unconfirmed:!!year_unconfirmed&&!due_date,status:due_date&&due_date<localToday()&&status==="completed"?"completed":"pending"}));
    await request("/activities/confirm",{method:"POST",body:JSON.stringify({document_id:docId,activities})});
    if(version!==sessionVersion.current)return;
    clearReviewDraft(docId,username);setPendingReviews(previous=>previous.filter(item=>item.document_id!==docId));
@@ -281,8 +311,8 @@ export default function Home(){
   actionPending.current=true;setBusy(true);setError("");
   const version=sessionVersion.current;
   try{
-   const {title,description,activity_type,due_date,review_required,status}=values;
-   const created=await request("/activities",{method:"POST",body:JSON.stringify({course_id:courseId,title,description,
+   const {title,description,date_warning_reason,activity_type,due_date,review_required,status}=values;
+   const created=await request("/activities",{method:"POST",body:JSON.stringify({course_id:courseId,title,description,date_warning_reason:due_date?"":date_warning_reason||"",
     activity_type:activity_type||"otro",due_date,review_required,status:status||"pending"})});
    if(version!==sessionVersion.current)return "La sesión cambió. Inicia sesión de nuevo.";
    setItems(previous=>[created,...previous]);
@@ -318,15 +348,18 @@ export default function Home(){
   onToggleMode={()=>{setAuthMode(authMode==="login"?"register":"login");setAuthError("");setPassword("");setPasswordConfirmation("")}}
   onClearAuthError={()=>setAuthError("")} onClearNotice={()=>setNotice("")}
  />;
- return <div className="layout"><dialog ref={logoutDialogRef} className="logout-dialog" aria-labelledby="logout-dialog-title" aria-describedby="logout-dialog-description" onCancel={e=>{e.preventDefault();cancelLogout()}}><h2 id="logout-dialog-title">¿Cerrar sesión?</h2><p id="logout-dialog-description">Volverás a la pantalla de acceso.</p>{logoutError&&<p className="error" role="alert">{logoutError}</p>}<div className="logout-dialog-actions"><button type="button" className="logout-cancel" autoFocus disabled={busy} onClick={cancelLogout}>Cancelar</button><button type="button" className="primary" disabled={busy} onClick={logout}>{busy?"Cerrando sesión…":"Confirmar"}</button></div></dialog><div className="toast-stack">{error&&<Toast key={`error-${errorId}`} kind="error" message={error} onClose={()=>setError("")}/>} {notice&&<Toast key={`notice-${noticeId}`} kind="success" message={notice} onClose={()=>setNotice("")}/>}</div><aside className="sidebar">
+ return <div className="layout"><dialog ref={logoutDialogRef} className="logout-dialog" aria-labelledby="logout-dialog-title" aria-describedby="logout-dialog-description" onCancel={e=>{e.preventDefault();cancelLogout()}}><h2 id="logout-dialog-title">¿Cerrar sesión?</h2><p id="logout-dialog-description">Volverás a la pantalla de acceso.</p>{logoutError&&<p className="error" role="alert">{logoutError}</p>}<div className="logout-dialog-actions"><button type="button" className="logout-cancel" autoFocus disabled={busy} onClick={cancelLogout}>Cancelar</button><button type="button" className="primary" disabled={busy} onClick={logout}>{busy?"Cerrando sesión…":"Confirmar"}</button></div></dialog><div className="toast-stack">{error&&<Toast key={`error-${errorId}`} kind="error" message={error} onClose={()=>setError("")}/>} {notice&&<Toast key={`notice-${noticeId}`} kind="success" message={notice} onClose={()=>setNotice("")}/>}</div><aside className="sidebar" onKeyDown={event=>{if(event.key==="Escape"&&mobileMenuOpen){setMobileMenuOpen(false);mobileMenuButtonRef.current?.focus()}}}>
  <div className="brand"><SidebarIcon name="brand"/><b>Tarevia</b></div>
- <nav aria-label="Navegación principal">{NAV_ITEMS.map(({id,label})=><button key={id} className={section===id?"nav active":"nav"} aria-current={section===id?"page":undefined} onClick={()=>{setSection(id);if(id==="tareas")setTaskView("board");setNotice("")}}><SidebarIcon name={id}/><span>{label}</span></button>)}</nav>
- <div className="side-bottom"><UserPreferencesMenu username={username} /><button ref={logoutButtonRef} className="logout" disabled={busy} onClick={()=>{setLogoutError("");setLogoutOpen(true)}}><SidebarIcon name="logout"/><span>Cerrar sesión</span></button></div>
- </aside><main className="main"><div className="content">
- {section==="panel"&&<PanelPage items={items} upcoming={upcoming} overdue={overdue} undated={undated} busy={busy} filters={{courses,courseFilter:panelCourseFilter,setCourseFilter:setPanelCourseFilter,typeFilter:panelTypeFilter,setTypeFilter:setPanelTypeFilter}} loaded={loaded} complete={complete} onAnalyze={()=>setSection("cargar")} onShowAll={()=>{setTaskView("list");setSection("tareas")}}/>}
+ <button ref={mobileMenuButtonRef} type="button" className="mobile-menu-toggle" aria-label={mobileMenuOpen?"Cerrar menú":"Abrir menú"} aria-expanded={mobileMenuOpen} aria-controls="mobile-navigation" onClick={()=>setMobileMenuOpen(open=>!open)}><span className="mobile-menu-lines" aria-hidden="true"><span/><span/><span/></span></button>
+ <div id="mobile-navigation" className={`mobile-nav-panel${mobileMenuOpen?" is-open":""}`}>
+ <nav aria-label="Navegación principal">{NAV_ITEMS.map(({id,label})=><button key={id} className={section===id?"nav active":"nav"} aria-current={section===id?"page":undefined} onClick={()=>{setSection(id);setMobileMenuOpen(false);if(id==="tareas")setTaskView("board");setNotice("")}}><SidebarIcon name={id}/><span>{label}</span></button>)}</nav>
+ <div className="side-bottom"><UserPreferencesMenu username={username} /><button ref={logoutButtonRef} className="logout" disabled={busy} onClick={()=>{setMobileMenuOpen(false);setLogoutError("");setLogoutOpen(true)}}><SidebarIcon name="logout"/><span>Cerrar sesión</span></button></div>
+ </div>
+ </aside><main className="main" inert={mobileMenuOpen} aria-hidden={mobileMenuOpen}><div className="content">
+ {section==="panel"&&<PanelPage items={items} upcoming={upcoming} overdue={overdue} undated={undated} busy={busy} filters={{courses,courseFilter:panelCourseFilter,setCourseFilter:setPanelCourseFilter,typeFilter:panelTypeFilter,setTypeFilter:setPanelTypeFilter}} loaded={loaded} complete={complete} reopen={reopen} onAnalyze={()=>setSection("cargar")} onShowAll={()=>{setTaskView("list");setSection("tareas")}}/>}
  {section==="tareas"&&<TasksPage items={shown} filters={{courses,courseFilter,setCourseFilter,typeFilter,setTypeFilter,from,setFrom,to,setTo}} loaded={loaded} busy={busy} view={taskView} onChangeView={setTaskView} complete={complete} reopen={reopen} onSave={(id,values)=>mutateActivity(id,"PATCH",values)} onCreate={createManualActivity} onDelete={id=>mutateActivity(id,"DELETE",undefined,"","Actividad borrada.")} onCourses={()=>setSection("cursos")}/>}
  {section==="calendario"&&<CalendarPage items={items} courses={courses} loaded={loaded} busy={busy} complete={complete} reopen={reopen}/>}
- {section==="cursos"&&<CoursesPage courses={courses} items={items} loaded={loaded} busy={busy} newCourse={newCourse} setNewCourse={setNewCourse} editingCourse={editingCourse} setEditingCourse={setEditingCourse} confirmDeactivateId={confirmDeactivateId} setConfirmDeactivateId={setConfirmDeactivateId} onAdd={addCourse} onSave={saveCourse} onChangeStatus={changeCourseStatus} onDeleteEmpty={deleteEmptyCourse}/>}
- {section==="cargar"&&<AnalyzePage pendingReviews={pendingReviews.filter(review=>review.document_id!==docId)} savedDocuments={savedDocuments} deleteSavedError={deleteSavedError} onClearSavedDeleteError={()=>setDeleteSavedError("")} reviewFileName={reviewFileName} onResumeReview={resumeReview} onDeleteReview={deleteReview} onDeleteSavedDocument={deleteSavedDocument} reviewRef={reviewRef} uploadFormRef={uploadFormRef} courses={courses} activeCourses={activeCourses} uploadCourse={uploadCourse} setUploadCourse={setUploadCourse} selectedFileName={selectedFileName} setSelectedFileName={setSelectedFileName} busy={busy} proposals={proposals} setProposals={setProposals} docId={docId} reviewError={reviewError} onUpload={upload} onEdit={edit} onConfirm={confirm} onCourses={()=>setSection("cursos")}/>}
+ {section==="cursos"&&<CoursesPage courses={courses} items={items} loaded={loaded} busy={busy} error={error} onClearError={()=>setError("")} newCourse={newCourse} setNewCourse={setNewCourse} newCourseCode={newCourseCode} setNewCourseCode={setNewCourseCode} newCourseTerm={newCourseTerm} setNewCourseTerm={setNewCourseTerm} editingCourse={editingCourse} setEditingCourse={setEditingCourse} confirmDeactivateId={confirmDeactivateId} setConfirmDeactivateId={setConfirmDeactivateId} onAdd={addCourse} onSave={saveCourse} onChangeStatus={changeCourseStatus} onDeleteEmpty={deleteEmptyCourse}/>}
+ {section==="cargar"&&<AnalyzePage pendingReviews={pendingReviews.filter(review=>review.document_id!==docId)} savedDocuments={savedDocuments} deleteSavedError={deleteSavedError} onClearSavedDeleteError={()=>setDeleteSavedError("")} reviewFileName={reviewFileName} reviewCourseId={reviewCourseId} onChangeReviewCourse={changeReviewCourse} onResumeReview={resumeReview} onDeleteReview={deleteReview} onDeleteSavedDocument={deleteSavedDocument} reviewRef={reviewRef} uploadFormRef={uploadFormRef} courses={courses} activeCourses={activeCourses} uploadCourse={uploadCourse} setUploadCourse={setUploadCourse} selectedFileName={selectedFileName} setSelectedFileName={setSelectedFileName} busy={busy} proposals={proposals} setProposals={setProposals} docId={docId} reviewError={reviewError} onUpload={upload} onEdit={edit} onConfirm={confirm} onCourses={()=>setSection("cursos")}/>}
  </div></main></div>
 }

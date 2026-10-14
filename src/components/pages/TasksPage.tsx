@@ -3,6 +3,7 @@ import { ActivityList, Filters } from "../ActivityParts";
 import { createDragAutoScroll } from "../../lib/dragAutoScroll";
 import { ACTIVITY_TYPES } from "../../lib/activityTypes";
 import { localToday, proposalError, type Proposal } from "../../lib/proposals";
+import { separateDateWarning, separateYearWarning } from "../../lib/activityWarning";
 import type { Activity, FilterProps } from "../types";
 
 type Props = {
@@ -33,6 +34,7 @@ export function TasksPage({ items, filters, loaded, busy, view, onChangeView, co
   const [dialogError, setDialogError] = useState("");
   const [draggingId, setDraggingId] = useState("");
   const [dropTarget, setDropTarget] = useState<"pending" | "completed" | null>(null);
+  const [dragSupported, setDragSupported] = useState(true);
   const draggedIdRef = useRef("");
   const autoScrollRef = useRef<ReturnType<typeof createDragAutoScroll> | null>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -82,8 +84,12 @@ export function TasksPage({ items, filters, loaded, busy, view, onChangeView, co
 
   function open(activity: Activity, mode: "edit" | "delete") {
     triggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    setDraft({ title: activity.title, description: activity.description, activity_type: activity.activity_type || "otro",
-      due_date: activity.due_date, review_required: activity.review_required || !activity.due_date });
+    const warning = separateYearWarning(activity.description, activity.year_unconfirmed);
+    const dateWarning = separateDateWarning(warning.description, activity.date_warning_reason);
+    setDraft({ title: activity.title, description: dateWarning.description, date_warning_reason: dateWarning.reason, activity_type: activity.activity_type || "otro",
+      due_date: activity.due_date, review_required: activity.review_required || !activity.due_date,
+      year_unconfirmed: warning.yearUnconfirmed && !activity.due_date,
+      status: activity.status === "completed" ? "completed" : "pending" });
     setDialogError("");
     setSelection({ mode, activity });
   }
@@ -115,6 +121,17 @@ export function TasksPage({ items, filters, loaded, busy, view, onChangeView, co
   }
 
   useEffect(() => () => autoScrollRef.current?.stop(), []);
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const desktopPointer = window.matchMedia("(min-width: 821px) and (pointer: fine)");
+    const updateDragSupport = () => {
+      setDragSupported(desktopPointer.matches);
+      if (!desktopPointer.matches) clearDrag();
+    };
+    updateDragSupport();
+    desktopPointer.addEventListener("change", updateDragSupport);
+    return () => desktopPointer.removeEventListener("change", updateDragSupport);
+  }, []);
 
   function clearDrag() {
     autoScrollRef.current?.stop();
@@ -124,7 +141,7 @@ export function TasksPage({ items, filters, loaded, busy, view, onChangeView, co
   }
 
   function startDrag(activity: Activity, event: DragEvent<HTMLElement>) {
-    if (busy || view !== "board") { event.preventDefault(); return; }
+    if (busy || view !== "board" || !dragSupported) { event.preventDefault(); return; }
     event.dataTransfer.setData("application/x-tarevia-activity", activity.id);
     event.dataTransfer.effectAllowed = "move";
     draggedIdRef.current = activity.id;
@@ -155,7 +172,7 @@ export function TasksPage({ items, filters, loaded, busy, view, onChangeView, co
   }
 
   const listProps = { courses: filters.courses, loaded, busy, complete, reopen,
-    draggable: view === "board", draggingId, onDragStart: startDrag, onDragEnd: clearDrag,
+    draggable: view === "board" && dragSupported, draggingId, onDragStart: startDrag, onDragEnd: clearDrag,
     onEdit: (activity: Activity) => open(activity, "edit"), onDelete: (activity: Activity) => open(activity, "delete") };
 
   return <>
@@ -171,6 +188,7 @@ export function TasksPage({ items, filters, loaded, busy, view, onChangeView, co
         </div>
         <label>Título<input autoFocus required maxLength={240} placeholder="Ej. Entregar informe" value={manualDraft.title} disabled={busy} onChange={event => setManualDraft({ ...manualDraft, title: event.target.value })} /></label>
         <label>Descripción<textarea rows={3} maxLength={5000} placeholder="Detalles de la tarea" value={manualDraft.description} disabled={busy} onChange={event => setManualDraft({ ...manualDraft, description: event.target.value })} /></label>
+        {!manualDraft.due_date && <label>Motivo de la fecha sin confirmar (opcional)<input maxLength={1000} value={manualDraft.date_warning_reason || ""} disabled={busy} onChange={event => setManualDraft({ ...manualDraft, date_warning_reason: event.target.value })} /></label>}
         <div className="manual-task-fields"><label>Fecha de entrega<input type="date" value={manualDraft.due_date || ""} disabled={busy} onChange={event => setManualDraft({ ...manualDraft, due_date: event.target.value || null,
           review_required: event.target.value ? manualDraft.review_required : true,
           status: !event.target.value || event.target.value >= localToday() ? "pending" : manualDraft.status || "pending" })} /></label>
@@ -204,9 +222,11 @@ export function TasksPage({ items, filters, loaded, busy, view, onChangeView, co
         {selection?.mode === "edit" ? <>
           <label>Título<input placeholder="Ej. Entrega del proyecto final" value={draft.title} autoFocus required maxLength={240} disabled={busy} onChange={event => setDraft({ ...draft, title: event.target.value })} /></label>
           <label>Descripción<textarea placeholder="Describe la actividad y lo que debes entregar" value={draft.description} rows={3} maxLength={5000} disabled={busy} onChange={event => setDraft({ ...draft, description: event.target.value })} /></label>
+          {!draft.due_date && <label>Motivo de la fecha sin confirmar (opcional)<input maxLength={1000} value={draft.date_warning_reason || ""} disabled={busy} onChange={event => setDraft({ ...draft, date_warning_reason: event.target.value })} /></label>}
           <div className="task-edit-fields">
             <label>Tipo de entrega<select value={draft.activity_type || "otro"} disabled={busy} onChange={event => setDraft({ ...draft, activity_type: event.target.value as Proposal["activity_type"] })}>{ACTIVITY_TYPES.map(type => <option value={type.value} key={type.value}>{type.label}</option>)}</select></label>
-            <label>Fecha<input type="date" value={draft.due_date || ""} disabled={busy} onChange={event => setDraft({ ...draft, due_date: event.target.value || null, review_required: event.target.value ? draft.review_required : true })} /></label>
+            <label>Fecha<input type="date" value={draft.due_date || ""} disabled={busy} onChange={event => setDraft({ ...draft, due_date: event.target.value || null, review_required: event.target.value ? draft.review_required : true, year_unconfirmed: event.target.value ? false : draft.year_unconfirmed })} /></label>
+            {draft.due_date && draft.due_date < localToday() && <label>Estado<select value={draft.status || "pending"} disabled={busy} onChange={event => setDraft({ ...draft, status: event.target.value as Proposal["status"] })}><option value="pending">Vencida</option><option value="completed">Entregada</option></select></label>}
           </div>
           <label className="check task-review"><input type="checkbox" checked={draft.review_required} disabled={busy || !draft.due_date} onChange={event => setDraft({ ...draft, review_required: event.target.checked })} />Pendiente de revisión</label>
         </> : <p id={descriptionId}>Se borrará <strong>{selection?.activity.title}</strong>. Esta acción no se puede deshacer. Si era la última actividad de un documento, también se quitará su registro.</p>}

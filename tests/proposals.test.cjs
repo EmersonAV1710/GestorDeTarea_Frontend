@@ -13,13 +13,27 @@ const typesCode = ts.transpileModule(fs.readFileSync("src/lib/activityTypes.ts",
 }).outputText;
 const typesModule = {};
 vm.runInNewContext(typesCode, {exports: typesModule});
+const warningsCode = ts.transpileModule(fs.readFileSync("src/lib/activityWarning.ts", "utf8"), {
+  compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020},
+}).outputText;
+const warningsModule = {};
+vm.runInNewContext(warningsCode, {exports: warningsModule});
 vm.runInNewContext(code, {exports: exportsObject, Date, Array, Error, require: id => {
-  assert.equal(id, "./activityTypes");
-  return typesModule;
+  if (id === "./activityTypes") return typesModule;
+  if (id === "./activityWarning") return warningsModule;
+  assert.fail(`Unexpected module: ${id}`);
 }});
 const {proposalError, parseAnalysis, validDate, apiError, localToday} = exportsObject;
 const proposal = {title: "Entrega", description: "", due_date: "2026-11-20", review_required: false};
 const document_id = "00000000-0000-0000-0000-000000000001";
+
+test("legacy alternative dates are separated when an analysis is restored", () => {
+  const reason = "Fechas alternativas entre semana A (20 octubre) y semana B (27 octubre).";
+  const result = parseAnalysis({document_id, proposals: [{...proposal, due_date: null,
+    description: `Presentar el proyecto. ${reason}`} ]});
+  assert.equal(result.proposals[0].description, "Presentar el proyecto.");
+  assert.equal(result.proposals[0].date_warning_reason, reason);
+});
 
 test("calendar dates reject rollover dates, timestamps, and invalid years", () => {
   assert.equal(validDate("2026-02-30"), false);
@@ -40,6 +54,12 @@ test("analysis accepts empty results and flags undated proposals", () => {
   assert.equal(result.proposals[0].review_required, true);
   assert.equal(result.proposals[0].title, "Entrega");
   assert.equal(result.proposals[0].status, "pending");
+});
+test("analysis preserves the missing-year warning and validates its type", () => {
+  const result = parseAnalysis({document_id, proposals: [{...proposal, due_date: null, year_unconfirmed: true}]});
+  assert.equal(result.proposals[0].year_unconfirmed, true);
+  assert.equal(result.proposals[0].review_required, true);
+  assert.throws(() => parseAnalysis({document_id, proposals: [{...proposal, year_unconfirmed: "true"}]}));
 });
 test("proposal status accepts delivered work and rejects unknown values", () => {
   assert.equal(proposalError([{...proposal, status: "completed"}]), "");

@@ -27,7 +27,7 @@ function createBoard(busy = false, withCourse = false) {
     const code = ts.transpileModule(fs.readFileSync(file, "utf8"), { compilerOptions: {
       module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX,
     }}).outputText;
-    vm.runInNewContext(code, { exports: result, window: {
+    vm.runInNewContext(code, { exports: result, document: { activeElement: null }, HTMLElement: class {}, window: {
       innerHeight: 800, requestAnimationFrame() { return 1; }, cancelAnimationFrame() {},
       scrollBy() {}, addEventListener() {}, removeEventListener() {},
     }, require: id => {
@@ -45,7 +45,7 @@ function createBoard(busy = false, withCourse = false) {
     { id: "pending", status: "pending", title: "Pendiente", description: "", course_id: "course", due_date: null, review_required: false },
     { id: "done", status: "completed", title: "Hecha", description: "", course_id: "course", due_date: null, review_required: false },
   ], filters: { courses: withCourse ? [{ id: "course", name: "Prueba", is_active: true }] : [], courseFilter: "", typeFilter: "", from: "", to: "" },
-    loaded: true, busy, view: "board", onChangeView() {}, onSave() {}, onDelete() {}, onCourses() {},
+    loaded: true, busy, view: "board", onChangeView() {}, onSave: (id, values) => { calls.push(["save", id, values]); return Promise.resolve(null); }, onDelete: id => { calls.push(["delete", id]); return Promise.resolve(null); }, onCourses() {},
     onCreate: (courseId, values) => { calls.push(["create", courseId, values]); return Promise.resolve(null); },
     complete: id => calls.push(["complete", id]), reopen: id => calls.push(["reopen", id]),
   };
@@ -107,6 +107,45 @@ test("busy tasks cannot be dragged or changed through a drop", () => {
   assert.equal(board.event.prevented, true);
   board.column("completed").props.onDrop(board.event);
   assert.deepEqual(board.calls, []);
+});
+
+test("task actions use the compact menu and details open a dialog", () => {
+  const board = createBoard();
+  const card = board.card("pending");
+  const menu = board.find(card, node => node.type === "details" && node.props.className === "activity-menu")[0];
+  assert(menu);
+  assert.equal(board.find(menu, node => node.type === "summary")[0].props.children, "···");
+  assert.equal(board.find(card, node => node.props?.className === "activity-actions").length, 0);
+  let opened = false;
+  let closed = false;
+  const event = { currentTarget: { closest: selector => selector === "details"
+    ? { removeAttribute: () => { closed = true; } }
+    : { querySelector: () => ({ showModal: () => { opened = true; } }) } } };
+  board.find(menu, node => node.type === "button" && node.props.children === "Ver detalles")[0].props.onClick(event);
+  assert.equal(opened, true);
+  assert.equal(closed, true);
+  board.find(menu, node => node.type === "button" && node.props.children === "Eliminar")[0].props.onClick(event);
+  assert.equal(board.find(board.render(), node => node.type === "h2" && node.props.children === "¿Borrar tarea?").length, 1);
+});
+
+test("editing a task with a past date can set delivered or overdue status", async () => {
+  const board = createBoard();
+  const editButton = () => board.find(board.card("pending"), node => node.type === "button" && node.props?.["aria-label"] === "Modificar Pendiente")[0];
+  editButton().props.onClick({ currentTarget: { closest: () => ({ removeAttribute() {} }) } });
+  const dialog = () => board.find(board.render(), node => node.type === "dialog")[0];
+  const dateInput = () => board.find(dialog(), node => node.type === "input" && node.props.type === "date")[0];
+  dateInput().props.onChange({ target: { value: "2000-01-01" } });
+  const statusSelect = () => board.find(dialog(), node => node.type === "select" &&
+    board.find(node, option => option.type === "option" && option.props.value === "completed").length)[0];
+  assert(statusSelect());
+  assert.equal(statusSelect().props.value, "pending");
+  assert(board.find(statusSelect(), node => node.type === "option" && node.props.value === "pending" && node.props.children === "Vencida").length);
+  statusSelect().props.onChange({ target: { value: "completed" } });
+  board.find(dialog(), node => node.type === "form")[0].props.onSubmit({ preventDefault() {} });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(board.calls[0][0], "save");
+  assert.equal(board.calls[0][2].due_date, "2000-01-01");
+  assert.equal(board.calls[0][2].status, "completed");
 });
 
 test("manual task form creates a task without a document", async () => {

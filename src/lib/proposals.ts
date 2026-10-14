@@ -1,12 +1,15 @@
 import { ACTIVITY_TYPES, type ActivityType } from "./activityTypes";
+import { separateDateWarning, separateYearWarning } from "./activityWarning";
 
 export type Proposal = {
   activity_type?: ActivityType;
   title: string;
   description: string;
+  date_warning_reason?: string;
   due_date: string | null;
   status?: "pending" | "completed";
   review_required: boolean;
+  year_unconfirmed?: boolean;
   source_excerpt?: string;
 };
 
@@ -27,11 +30,14 @@ export function proposalError(proposals: Proposal[]): string {
       return label + "el título debe tener entre 1 y 240 caracteres.";
     if (typeof p.description !== "string" || Array.from(p.description).length > 5000)
       return label + "la descripción debe tener hasta 5000 caracteres.";
+    if (p.date_warning_reason !== undefined && (typeof p.date_warning_reason !== "string" || Array.from(p.date_warning_reason).length > 1000))
+      return label + "el motivo de la fecha debe tener hasta 1000 caracteres.";
     if (p.due_date !== null && (typeof p.due_date !== "string" || !validDate(p.due_date)))
       return label + "ingresa una fecha válida o déjala vacía.";
     if (p.status !== undefined && p.status !== "pending" && p.status !== "completed")
       return label + "selecciona un estado válido.";
     if (typeof p.review_required !== "boolean") return label + "indica si necesita revisión.";
+    if (p.year_unconfirmed !== undefined && typeof p.year_unconfirmed !== "boolean") return label + "indica si el año necesita revisión.";
   }
   return "";
 }
@@ -48,7 +54,11 @@ export function parseAnalysis(value: unknown): {document_id: string; proposals: 
     const problem = proposalError([p]);
     if (problem || (p.source_excerpt !== undefined && typeof p.source_excerpt !== "string"))
       throw Error(problem || "El fragmento de origen no es válido.");
-    return {...p, activity_type: p.activity_type || "otro", title: p.title.trim(), status: p.status || "pending", review_required: p.review_required || p.due_date === null};
+    const year = separateYearWarning(p.description, p.year_unconfirmed);
+    const date = separateDateWarning(year.description, p.date_warning_reason);
+    return {...p, description: date.description, date_warning_reason: p.due_date ? "" : date.reason,
+      year_unconfirmed: year.yearUnconfirmed && !p.due_date,
+      activity_type: p.activity_type || "otro", title: p.title.trim(), status: p.status || "pending", review_required: p.review_required || p.due_date === null};
   });
   return {document_id: body.document_id, proposals};
 }
