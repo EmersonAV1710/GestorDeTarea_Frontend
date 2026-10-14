@@ -20,11 +20,12 @@ type Props = {
   onLogin: (event: FormEvent) => void;
   onRegister: (event: FormEvent) => void;
   onToggleMode: () => void;
+  onContinueAsGuest?: () => void;
   onClearAuthError: () => void;
   onClearNotice: () => void;
 };
 
-export function AuthPage({ authMode, email, setEmail, username, setUsername, password, setPassword, passwordConfirmation, setPasswordConfirmation, busy, authError, authErrorId, notice, noticeId, onLogin, onRegister, onToggleMode, onClearAuthError, onClearNotice }: Props) {
+export function AuthPage({ authMode, email, setEmail, username, setUsername, password, setPasswordConfirmation, setPassword, passwordConfirmation, busy, authError, authErrorId, notice, noticeId, onLogin, onRegister, onToggleMode, onContinueAsGuest, onClearAuthError, onClearNotice }: Props) {
   const hasMinimumLength = Array.from(password).length >= 8;
   const hasUppercase = /\p{Lu}/u.test(password);
   const hasNumber = /\p{Nd}/u.test(password);
@@ -51,6 +52,7 @@ export function AuthPage({ authMode, email, setEmail, username, setUsername, pas
         <button className="primary" disabled={busy || (authMode === "register" && (!hasMinimumLength || !hasUppercase || !hasNumber || !passwordsMatch))}>{busy ? (authMode === "login" ? "Ingresando…" : "Creando cuenta…") : (authMode === "login" ? "Iniciar sesión" : "Crear cuenta")}</button>
       </form>
       <button className="auth-toggle" disabled={busy} onClick={onToggleMode}>{authMode === "login" ? "¿No tienes cuenta? Crear una cuenta" : "¿Ya tienes cuenta? Inicia sesión"}</button>
+      {authMode === "login" && onContinueAsGuest && <button type="button" className="guest-entry" disabled={busy} onClick={onContinueAsGuest}>Continuar sin iniciar sesión</button>}
     </div>
     <div className="toast-stack">{authError && <Toast key={`auth-${authErrorId}`} kind="error" message={authError} onClose={onClearAuthError} />}{notice && <Toast key={`notice-${noticeId}`} kind="success" message={notice} onClose={onClearNotice} />}</div>
   </main>;

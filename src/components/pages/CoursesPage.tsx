@@ -4,6 +4,7 @@ import { closeOtherActionMenus } from "../../lib/actionMenus";
 import type { Activity, Course } from "../types";
 
 type Props = {
+  guest?: boolean;
   courses: Course[];
   items: Activity[];
   loaded: boolean;
@@ -26,7 +27,7 @@ type Props = {
   onDeleteEmpty: (course: Course) => Promise<string | null>;
 };
 
-export function CoursesPage({ courses, items, loaded, busy, error, onClearError, newCourse, setNewCourse, newCourseCode, setNewCourseCode, newCourseTerm, setNewCourseTerm, editingCourse, setEditingCourse, confirmDeactivateId, setConfirmDeactivateId, onAdd, onSave, onChangeStatus, onDeleteEmpty }: Props) {
+export function CoursesPage({ guest = false, courses, items, loaded, busy, error, onClearError, newCourse, setNewCourse, newCourseCode, setNewCourseCode, newCourseTerm, setNewCourseTerm, editingCourse, setEditingCourse, confirmDeactivateId, setConfirmDeactivateId, onAdd, onSave, onChangeStatus, onDeleteEmpty }: Props) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const createDialogRef = useRef<HTMLDialogElement>(null);
   const createTriggerRef = useRef<HTMLButtonElement>(null);
@@ -93,7 +94,7 @@ export function CoursesPage({ courses, items, loaded, busy, error, onClearError,
     <dialog ref={dialogRef} className="logout-dialog" aria-labelledby={titleId} aria-describedby={descriptionId}
       onCancel={event => { event.preventDefault(); cancel(); }} onClose={() => triggerRef.current?.focus()}>
       <h2 id={titleId}>{deleting ? "¿Borrar curso?" : "¿Desactivar curso?"}</h2>
-      <p id={descriptionId}>{deleting ? <>Se borrará <strong>{selectedCourse?.name}</strong> y cualquier revisión pendiente del curso. Esta acción no se puede deshacer.</>
+      <p id={descriptionId}>{deleting ? guest ? <>Se borrará <strong>{selectedCourse?.name}</strong> y sus tareas locales. Esta acción no se puede deshacer.</> : <>Se borrará <strong>{selectedCourse?.name}</strong> y cualquier revisión pendiente del curso. Esta acción no se puede deshacer.</>
         : <>Se desactivará <strong>{selectedCourse?.name}</strong>. Sus tareas se conservarán y podrás reactivarlo después.</>}</p>
       {confirmationError && <div className="error" role="alert">{confirmationError}</div>}
       <div className="logout-dialog-actions">
@@ -149,7 +150,7 @@ export function CoursesPage({ courses, items, loaded, busy, error, onClearError,
               <span className="course-count">{activityCount} {activityCount === 1 ? "tarea" : "tareas"}</span>
               <details className="course-menu" onToggle={event => closeOtherActionMenus(event.currentTarget)}><summary aria-label={`Opciones de ${course.name}`} title="Opciones">···</summary><div className="course-menu-options">
               <button type="button" disabled={busy} onClick={event => { onClearError(); editTriggerRef.current = event.currentTarget.closest("details")?.querySelector("summary") ?? null; event.currentTarget.closest("details")?.removeAttribute("open"); setEditingCourse({ ...course }); setConfirmDeactivateId(""); }}>Editar</button>
-              {activityCount === 0 ? <button type="button" className="course-menu-danger" disabled={busy} onClick={event => {
+              {(guest || activityCount === 0) ? <button type="button" className="course-menu-danger" disabled={busy} onClick={event => {
                 triggerRef.current = event.currentTarget;
                 setConfirmationError("");
                 setConfirmDeactivateId("");

@@ -1,4 +1,5 @@
 import type { ActivityType } from "../lib/activityTypes";
+import type { ActivityStatusFilter } from "../lib/activityStatus";
 
 export type Course = {
   id: string;
@@ -23,6 +24,8 @@ export type Activity = {
 };
 
 export type FilterProps = {
+  statusFilter: ActivityStatusFilter;
+  setStatusFilter: (value: ActivityStatusFilter) => void;
   typeFilter: string;
   setTypeFilter: (value: string) => void;
   courses: Course[];

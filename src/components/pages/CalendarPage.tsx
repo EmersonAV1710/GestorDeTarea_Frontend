@@ -1,7 +1,8 @@
 import { useRef, useState } from "react";
-import { ActivityList, ResetFiltersButton } from "../ActivityParts";
-import type { Activity, Course } from "../types";
-import { ACTIVITY_TYPES, matchesActivityType } from "../../lib/activityTypes";
+import { ActivityList, FilterDisclosure, type ActiveFilter } from "../ActivityParts";
+import type { Activity, Course, FilterProps } from "../types";
+import { ACTIVITY_TYPES, activityTypeLabel, matchesActivityType } from "../../lib/activityTypes";
+import { matchesActivityStatus } from "../../lib/activityStatus";
 import { buildMonthDays, dateKey, groupActivitiesByDate } from "../../lib/calendar";
 
 type Props = {
@@ -22,8 +23,10 @@ export function CalendarPage({ items, courses, loaded, busy, complete, reopen }:
   const agendaRef = useRef<HTMLDialogElement>(null);
   const [courseFilter, setCourseFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState<FilterProps["statusFilter"]>("");
   const today = dateKey(new Date());
-  const filtered = items.filter(item => (!courseFilter || item.course_id === courseFilter) && matchesActivityType(item.activity_type, typeFilter));
+  const filtered = items.filter(item => (!courseFilter || item.course_id === courseFilter) && matchesActivityType(item.activity_type, typeFilter)
+    && matchesActivityStatus(item.status, statusFilter));
   const grouped = groupActivitiesByDate(filtered);
   const days = buildMonthDays(month.getFullYear(), month.getMonth());
   const selectedActivities = grouped.get(selectedDate) || [];
@@ -32,6 +35,10 @@ export function CalendarPage({ items, courses, loaded, busy, complete, reopen }:
   const selectedDateLabel = selectedDay ? fullDate.format(selectedDay.date) : selectedDate;
   const monthLabel = month.toLocaleDateString("es-CR", { month: "long", year: "numeric" });
   const listProps = { courses, loaded, busy, complete, reopen };
+  const activeFilters: ActiveFilter[] = [];
+  if (courseFilter) activeFilters.push({ key: "course", label: `Curso: ${courses.find(course => course.id === courseFilter)?.name || "Curso"}`, onRemove: () => setCourseFilter("") });
+  if (typeFilter) activeFilters.push({ key: "type", label: `Tipo: ${activityTypeLabel(typeFilter)}`, onRemove: () => setTypeFilter("") });
+  if (statusFilter) activeFilters.push({ key: "status", label: `Estado: ${statusFilter === "completed" ? "Hechas" : "Pendientes"}`, onRemove: () => setStatusFilter("") });
 
   function moveMonth(delta: number) {
     const next = new Date(month.getFullYear(), month.getMonth() + delta, 1, 12);
@@ -49,13 +56,6 @@ export function CalendarPage({ items, courses, loaded, busy, complete, reopen }:
 
   return <>
     <div className="page-title calendar-page-title"><div><h1>Calendario</h1><p className="muted">Consulta las fechas de tus tareas, proyectos y exámenes.</p></div></div>
-    <section className="calendar-filter-panel" aria-label="Filtros del calendario">
-      <div className="calendar-filters">
-        <label>Curso<select value={courseFilter} onChange={event => setCourseFilter(event.target.value)}><option value="">Todos los cursos</option>{courses.map(course => <option key={course.id} value={course.id}>{course.name}</option>)}</select></label>
-        <label>Tipo de entrega<select value={typeFilter} onChange={event => setTypeFilter(event.target.value)}><option value="">Todos los tipos</option>{ACTIVITY_TYPES.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}</select></label>
-        <ResetFiltersButton onClick={() => { setCourseFilter(""); setTypeFilter(""); }} />
-      </div>
-    </section>
     {!loaded ? <div className="empty">Cargando tus actividades…</div> : <>
       <section className="panel calendar-panel" aria-labelledby="calendar-month-title">
         <header className="calendar-toolbar">
@@ -66,6 +66,11 @@ export function CalendarPage({ items, courses, loaded, busy, complete, reopen }:
             <button type="button" className="logout-cancel" aria-label="Mes siguiente" onClick={() => moveMonth(1)}><svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m8 5 5 5-5 5" /></svg></button>
           </div>
         </header>
+        <FilterDisclosure className="calendar-filter-disclosure" activeFilters={activeFilters} onReset={() => { setCourseFilter(""); setTypeFilter(""); setStatusFilter(""); }}>
+          <label>Curso<select value={courseFilter} onChange={event => setCourseFilter(event.target.value)}><option value="">Todos los cursos</option>{courses.map(course => <option key={course.id} value={course.id}>{course.name}</option>)}</select></label>
+          <label>Tipo de entrega<select value={typeFilter} onChange={event => setTypeFilter(event.target.value)}><option value="">Todos los tipos</option>{ACTIVITY_TYPES.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}</select></label>
+          <label>Estado<select value={statusFilter} onChange={event => setStatusFilter(event.target.value as FilterProps["statusFilter"])}><option value="">Todos los estados</option><option value="pending">Pendientes</option><option value="completed">Hechas</option></select></label>
+        </FilterDisclosure>
         <div className="calendar-weekdays" aria-hidden="true">{weekdays.map(day => <span key={day}>{day}</span>)}</div>
         <div className="calendar-days">
           {days.map(day => {

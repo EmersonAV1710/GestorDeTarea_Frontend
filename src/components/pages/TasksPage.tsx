@@ -1,7 +1,8 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type DragEvent } from "react";
-import { ActivityList, Filters } from "../ActivityParts";
+import { ActivityList, FilterDisclosure, Filters, type ActiveFilter } from "../ActivityParts";
 import { createDragAutoScroll } from "../../lib/dragAutoScroll";
-import { ACTIVITY_TYPES } from "../../lib/activityTypes";
+import { ACTIVITY_TYPES, activityTypeLabel } from "../../lib/activityTypes";
+import { matchesActivityStatus } from "../../lib/activityStatus";
 import { localToday, proposalError, type Proposal } from "../../lib/proposals";
 import { separateDateWarning, separateYearWarning } from "../../lib/activityWarning";
 import type { Activity, FilterProps } from "../types";
@@ -44,9 +45,16 @@ export function TasksPage({ items, filters, loaded, busy, view, onChangeView, co
   const createPending = useRef(false);
   const titleId = useId();
   const descriptionId = useId();
-  const pendingTasks = items.filter(item => item.status !== "completed");
-  const doneTasks = items.filter(item => item.status === "completed");
+  const visibleItems = items.filter(item => matchesActivityStatus(item.status, filters.statusFilter));
+  const pendingTasks = visibleItems.filter(item => item.status !== "completed");
+  const doneTasks = visibleItems.filter(item => item.status === "completed");
   const activeCourses = filters.courses.filter(course => course.is_active);
+  const activeFilters: ActiveFilter[] = [];
+  if (filters.courseFilter) activeFilters.push({ key: "course", label: `Curso: ${filters.courses.find(course => course.id === filters.courseFilter)?.name || "Curso"}`, onRemove: () => filters.setCourseFilter("") });
+  if (filters.typeFilter) activeFilters.push({ key: "type", label: `Tipo: ${activityTypeLabel(filters.typeFilter)}`, onRemove: () => filters.setTypeFilter("") });
+  if (filters.statusFilter) activeFilters.push({ key: "status", label: `Estado: ${filters.statusFilter === "completed" ? "Hechas" : "Pendientes"}`, onRemove: () => filters.setStatusFilter("") });
+  if (filters.from) activeFilters.push({ key: "from", label: `Desde: ${filters.from.split("-").reverse().join("/")}`, onRemove: () => filters.setFrom("") });
+  if (filters.to) activeFilters.push({ key: "to", label: `Hasta: ${filters.to.split("-").reverse().join("/")}`, onRemove: () => filters.setTo("") });
 
   function openCreate() {
     setManualCourse("");
@@ -199,7 +207,11 @@ export function TasksPage({ items, filters, loaded, busy, view, onChangeView, co
         <div className="manual-task-actions"><button type="button" className="action-button" disabled={busy} onClick={() => { setShowCreate(false); setManualError(""); }}>Cancelar</button><button type="submit" className="primary" disabled={busy || !activeCourses.some(course => course.id === manualCourse) || !manualDraft.activity_type || !manualDraft.title.trim()}>{busy ? "Guardando…" : "Guardar tarea"}</button></div>
       </form> : <p className="muted">Para añadir una tarea, primero <button type="button" className="text-button" onClick={onCourses}>crea o activa un curso</button>.</p>}
     </section>}
-    <section className="task-filters" aria-label="Filtros de tareas"><Filters {...filters} /></section>
+    <section className="task-filters" aria-label="Filtros de tareas">
+      <FilterDisclosure className="task-filter-disclosure" taskCount={visibleItems.length} activeFilters={activeFilters} onReset={() => { filters.setCourseFilter(""); filters.setTypeFilter(""); filters.setStatusFilter(""); filters.setFrom(""); filters.setTo(""); }}>
+        <Filters {...filters} />
+      </FilterDisclosure>
+    </section>
     {view === "board" ? <div className="task-board">
       <section className={`panel task-column${dropTarget === "pending" ? " is-drop-target" : ""}`} aria-labelledby="pending-tasks-title"
         onDragOver={event => dragOver(event, "pending")} onDragLeave={leaveColumn} onDrop={event => dropActivity(event, "pending")}>
@@ -212,7 +224,7 @@ export function TasksPage({ items, filters, loaded, busy, view, onChangeView, co
         <ActivityList {...listProps} items={doneTasks} emptyText="Aquí aparecerán las tareas que completes." />
       </section>
     </div> : <section className="panel" aria-labelledby="all-tasks-title">
-      <h2 id="all-tasks-title">Todas las tareas</h2><ActivityList {...listProps} items={items} />
+      <h2 id="all-tasks-title">{filters.statusFilter === "pending" ? "Tareas pendientes" : filters.statusFilter === "completed" ? "Tareas hechas" : "Todas las tareas"}</h2><ActivityList {...listProps} items={visibleItems} />
     </section>}
     <dialog ref={dialogRef} className={`logout-dialog task-dialog${selection?.mode === "edit" ? " task-edit-dialog" : ""}`} aria-labelledby={titleId}
       aria-describedby={selection?.mode === "delete" ? descriptionId : undefined}

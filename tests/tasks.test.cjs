@@ -24,15 +24,16 @@ function load(file) {
   return result;
 }
 const { TasksPage } = load("src/components/pages/TasksPage.tsx");
-const { ActivityList, Filters } = load("src/components/ActivityParts.tsx");
+const { ActivityList } = load("src/components/ActivityParts.tsx");
 const { closeOtherActionMenus } = load("src/lib/actionMenus.ts");
 const { localToday } = load("src/lib/proposals.ts");
+const { matchesActivityStatus } = load("src/lib/activityStatus.ts");
 const course = { id: "course", name: "Programación", is_active: true };
 const base = { description: "Entrega", course_id: "course", activity_type: "tarea", due_date: null, review_required: true };
 const items = [{ ...base, id: "pending", title: "Tarea pendiente", status: "pending" },
   { ...base, id: "done", title: "Tarea hecha", status: "completed" }];
 const props = { items, loaded: true, busy: false, complete() {}, reopen() {}, onSave() {}, onDelete() {}, onChangeView() {},
-  filters: { courses: [course], courseFilter: "", typeFilter: "", from: "", to: "", setCourseFilter() {}, setTypeFilter() {}, setFrom() {}, setTo() {} } };
+  filters: { courses: [course], courseFilter: "", typeFilter: "", statusFilter: "", upcomingWeeks: null, from: "", to: "", setCourseFilter() {}, setTypeFilter() {}, setStatusFilter() {}, setUpcomingWeeks() {}, setFrom() {}, setTo() {} } };
 
 test("opening a three-dot menu closes the previous one", () => {
   const menus = [{ open: true }, { open: true }, { open: false }];
@@ -48,11 +49,51 @@ test("opening a three-dot menu closes the previous one", () => {
   assert.deepEqual(menus.map(menu => menu.open), [false, false, true]);
 });
 
-test("filter reset is a compact accessible icon", () => {
-  const html = renderToStaticMarkup(React.createElement(Filters, props.filters));
-  assert.match(html, /aria-label="Restablecer filtros"/);
-  assert.match(html, /class="clear filter-reset"/);
-  assert.doesNotMatch(html, />Limpiar<\/button>/);
+test("task filters start collapsed with the task count and two-column fields", () => {
+  const html = renderToStaticMarkup(React.createElement(TasksPage, { ...props, view: "board" }));
+  assert.match(html, /class="filter-disclosure task-filter-disclosure"/);
+  assert.match(html, /class="filter-toggle task-filter-toggle" aria-expanded="false" aria-controls="[^"]+"/);
+  assert.match(html, /<span class="task-filter-count">2 tareas<\/span>/);
+  assert.match(html, /class="filter-disclosure-content" hidden=""/);
+  assert.match(html, /Curso.*Tipo de entrega.*Estado.*Desde.*Hasta/);
+  assert.match(html, /Fecha inicial/);
+  assert.match(html, /Fecha final/);
+  assert.match(html, /Limpiar filtros/);
+});
+
+test("selected task filters appear as removable labels beside the filter button", () => {
+  const html = renderToStaticMarkup(React.createElement(TasksPage, { ...props, view: "board", filters: {
+    ...props.filters, courseFilter: "course", typeFilter: "examen", statusFilter: "completed", from: "2026-10-14", to: "2026-10-21",
+  } }));
+  for (const label of ["Curso: Programación", "Tipo: Examen", "Estado: Hechas", "Desde: 14/10/2026", "Hasta: 21/10/2026"]) {
+    assert.match(html, new RegExp(`aria-label="Quitar filtro ${label}"`));
+  }
+  assert.match(html, /class="active-filter-remove" aria-hidden="true">×<\/span>/);
+});
+
+test("task status filter shows pending or completed tasks in both views", () => {
+  for (const [statusFilter, visible, hidden, heading] of [
+    ["pending", "Tarea pendiente", "Tarea hecha", "Tareas pendientes"],
+    ["completed", "Tarea hecha", "Tarea pendiente", "Tareas hechas"],
+  ]) {
+    for (const view of ["board", "list"]) {
+      const html = renderToStaticMarkup(React.createElement(TasksPage, {
+        ...props, view, filters: { ...props.filters, statusFilter },
+      }));
+      assert.match(html, new RegExp(`>${visible}<`));
+      assert.doesNotMatch(html, new RegExp(`>${hidden}<`));
+      if (view === "list") assert.match(html, new RegExp(`<h2 id="all-tasks-title">${heading}</h2>`));
+    }
+  }
+});
+
+test("status filtering treats overdue tasks as pending across views", () => {
+  assert.equal(matchesActivityStatus("pending", "pending"), true);
+  assert.equal(matchesActivityStatus("completed", "pending"), false);
+  assert.equal(matchesActivityStatus("completed", "completed"), true);
+  assert.equal(matchesActivityStatus("pending", "completed"), false);
+  assert.equal(matchesActivityStatus("pending", ""), true);
+  assert.equal(matchesActivityStatus("completed", ""), true);
 });
 
 test("the task board separates pending and completed activities and exposes the full list", () => {
@@ -220,6 +261,13 @@ test("calendar shows month navigation and a dialog for the selected day's tasks"
   assert.match(html, /Tarea pendiente/);
   assert.match(html, /Actividades sin fecha/);
   assert.match(html, /Tipo de entrega/);
+  assert.match(html, /Estado.*<option value="pending">Pendientes<\/option><option value="completed">Hechas<\/option>/);
+  assert.match(html, /class="filter-disclosure calendar-filter-disclosure"/);
+  assert.match(html, /class="filter-toggle" aria-expanded="false" aria-controls="[^"]+"/);
+  assert.match(html, /Filtrar resultados/);
+  assert.match(html, /class="filter-disclosure-content" hidden=""/);
+  assert.doesNotMatch(html, /class="filter-card/);
+  assert.match(html, /↺ Limpiar filtros/);
 });
 
 
@@ -236,7 +284,7 @@ test("upcoming selection retains completed activities until their due date passe
   assert.deepEqual(upcomingActivities(activities, "2026-10-13").map(item => item.id), ["pending", "done"]);
 });
 
-test("panel shows every activity due within one week by default", () => {
+test("panel shows all future activities by default", () => {
   const today = new Date();
   const dueIn = days => { const date = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 12); date.setDate(date.getDate() + days); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`; };
   const upcoming = [
@@ -244,16 +292,29 @@ test("panel shows every activity due within one week by default", () => {
     ...Array.from({ length: 8 }, (_, index) => ({ ...items[0], id: `task-${index}`, title: `Actividad ${index + 1}`, due_date: dueIn(index % 7) })).reverse(),
   ];
   const html = renderToStaticMarkup(React.createElement(PanelPage, { ...props, upcoming, onAnalyze() {}, onShowAll() {} }));
-  assert.equal((html.match(/<article /g) || []).length, 8);
-  assert.doesNotMatch(html, /Más tarde/);
-  const filterRow = html.match(/<div class="filters panel-filters">([\s\S]*?)<\/div>/)?.[1];
-  assert(filterRow);
-  assert.match(filterRow, /Curso.*Tipo de entrega.*Semanas/);
-  assert.doesNotMatch(filterRow, /Desde|Hasta/);
+  assert.equal((html.match(/<article /g) || []).length, 9);
+  assert.match(html, /Más tarde/);
+  assert.match(html, /class="filter-disclosure panel-filter-disclosure"/);
+  assert.match(html, /class="filter-toggle" aria-expanded="false" aria-controls="[^"]+"/);
+  assert.match(html, /Filtrar resultados/);
+  assert.match(html, /class="filter-disclosure-content" hidden=""/);
+  assert.match(html, /Curso.*Tipo de entrega.*Estado.*Próximas entregas/);
+  assert.doesNotMatch(html, /class="filter-card/);
+  assert.match(html, /↺ Limpiar filtros/);
   assert.match(html, /<h2>Actividades próximas<\/h2>/);
   assert.doesNotMatch(html, /<h3[^>]*>Próximas<\/h3>/);
-  assert.match(html, /<option value="1" selected="">1 semana<\/option>/);
-  assert.match(html, /<option value="all">Todas<\/option>/);
+  assert.match(html, /<option value="1">1 semana<\/option>/);
+  assert.match(html, /<option value="all" selected="">Todas<\/option>/);
+});
+
+test("selected panel filters appear as removable labels beside the filter button", () => {
+  const html = renderToStaticMarkup(React.createElement(PanelPage, {
+    ...props, upcoming: [], filters: { ...props.filters, courseFilter: "course", typeFilter: "examen", statusFilter: "pending", upcomingWeeks: 2 },
+    onAnalyze() {}, onShowAll() {},
+  }));
+  for (const label of ["Curso: Programación", "Tipo: Examen", "Estado: Pendientes", "Próximas: 2 semanas"]) {
+    assert.match(html, new RegExp(`aria-label="Quitar filtro ${label}"`));
+  }
 });
 
 test("panel keeps completed upcoming activities visible with a check", () => {
@@ -297,10 +358,23 @@ test("undated activities use a collapsed panel with an inline count", () => {
 });
 
 test("upcoming deadline includes the last day and can be extended or removed", () => {
-  const activities = [6, 7, 8, 14, 15].map(days => ({ ...items[0], id: String(days), due_date: `2026-10-${String(12 + days).padStart(2, "0")}` }));
-  assert.deepEqual(upcomingWithinWeeks(activities, 1, "2026-10-12").map(item => item.id), ["6", "7"]);
-  assert.deepEqual(upcomingWithinWeeks(activities, 2, "2026-10-12").map(item => item.id), ["6", "7", "8", "14"]);
-  assert.equal(upcomingWithinWeeks(activities, null, "2026-10-12").length, 5);
+  const activities = [-1, 0, 6, 7, 8, 13, 14, 15].map(days => ({ ...items[0], id: String(days),
+    due_date: new Date(Date.UTC(2026, 9, 12 + days)).toISOString().slice(0, 10) }));
+  assert.deepEqual(upcomingWithinWeeks(activities, 1, "2026-10-12").map(item => item.id), ["0", "6", "7"]);
+  assert.deepEqual(upcomingWithinWeeks(activities, 2, "2026-10-12").map(item => item.id), ["0", "6", "7", "8", "13", "14"]);
+  assert.deepEqual(upcomingWithinWeeks(activities, null, "2026-10-12").map(item => item.id), ["0", "6", "7", "8", "13", "14", "15"]);
+});
+
+test("panel shows completed tasks from earlier dates and without dates when those filters apply", () => {
+  const oldDone = { ...items[1], id: "old-done", title: "Hecha anterior", due_date: "2020-01-01" };
+  const noDateDone = { ...items[1], id: "no-date-done", title: "Hecha sin fecha", due_date: null };
+  const html = renderToStaticMarkup(React.createElement(PanelPage, {
+    ...props, items: [oldDone, noDateDone], upcoming: [], overdue: [], undated: [noDateDone], pastCompleted: [oldDone],
+    onAnalyze() {}, onShowAll() {},
+  }));
+  assert.match(html, /Hechas anteriores/);
+  assert.match(html, /Hecha anterior/);
+  assert.match(html, /Hecha sin fecha/);
 });
 
 

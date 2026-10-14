@@ -7,6 +7,7 @@ import { WarningIcon } from "../WarningIcon";
 import type { Course } from "../types";
 
 type Props = {
+  preview?: boolean;
   pendingReviews: PendingReview[];
   savedDocuments: SavedDocument[];
   deleteSavedError: string;
@@ -51,7 +52,7 @@ export function clearSelectedFile(event: React.MouseEvent<HTMLButtonElement>, in
   input?.focus();
 }
 
-export function AnalyzePage({ pendingReviews, savedDocuments, deleteSavedError, onClearSavedDeleteError, reviewFileName, reviewCourseId, onChangeReviewCourse, onResumeReview, onDeleteReview, onDeleteSavedDocument, reviewRef, uploadFormRef, courses, activeCourses, uploadCourse, setUploadCourse, selectedFileName, setSelectedFileName, busy, proposals, setProposals, docId, reviewError, onUpload, onEdit, onConfirm, onCourses }: Props) {
+export function AnalyzePage({ preview = false, pendingReviews, savedDocuments, deleteSavedError, onClearSavedDeleteError, reviewFileName, reviewCourseId, onChangeReviewCourse, onResumeReview, onDeleteReview, onDeleteSavedDocument, reviewRef, uploadFormRef, courses, activeCourses, uploadCourse, setUploadCourse, selectedFileName, setSelectedFileName, busy, proposals, setProposals, docId, reviewError, onUpload, onEdit, onConfirm, onCourses }: Props) {
   const [draggingFile, setDraggingFile] = useState(false);
   const [uploadFileError, setUploadFileError] = useState("");
   const dragDepth = useRef(0);
@@ -102,7 +103,7 @@ export function AnalyzePage({ pendingReviews, savedDocuments, deleteSavedError, 
   }
 
   return <>
-    <div className="page-title upload-title"><div><h1>Analizar documento</h1><p className="muted">Sube un PDF, Word o TXT y revisa las tareas.</p></div>
+    <div className="page-title upload-title"><div><h1>Analizar documento</h1><p className="muted">{preview ? "Vista previa. Inicia sesión para analizar documentos." : "Sube un PDF, Word o TXT y revisa las tareas."}</p></div>
       <button id="saved-documents-trigger" type="button" className="action-button" aria-haspopup="dialog" aria-controls="saved-documents-dialog" onClick={event => event.currentTarget.ownerDocument.querySelector<HTMLDialogElement>("#saved-documents-dialog")?.showModal()}>Documentos guardados ({savedDocuments.length})</button>
     </div>
     <dialog id="saved-documents-dialog" className="logout-dialog saved-documents-dialog" aria-labelledby="saved-documents-title" onClose={event => event.currentTarget.ownerDocument.getElementById("saved-documents-trigger")?.focus()}>
@@ -154,7 +155,7 @@ export function AnalyzePage({ pendingReviews, savedDocuments, deleteSavedError, 
       </details>}
       <form ref={uploadFormRef} onSubmit={onUpload} className="stack"><fieldset disabled={busy} className="upload-fields">
         <label>Curso para el documento nuevo<select name="course_id" required value={uploadCourse} onChange={event => setUploadCourse(event.target.value)}><option value="">Selecciona un curso</option>{activeCourses.map(course => <option key={course.id} value={course.id}>{course.name}</option>)}</select></label>
-        {!activeCourses.length && <p className="upload-help">Para analizar un documento <button type="button" className="text-button" onClick={onCourses}>{courses.length ? "reactiva un curso" : "añade un curso"}</button>.</p>}
+        {!activeCourses.length && !preview && <p className="upload-help">Para analizar un documento <button type="button" className="text-button" onClick={onCourses}>{courses.length ? "reactiva un curso" : "añade un curso"}</button>.</p>}
         <label className={`upload-zone${draggingFile ? " is-dragging" : ""}`} onDragEnter={dragEnter} onDragOver={event => { event.preventDefault(); if (!busy) event.dataTransfer.dropEffect = "copy"; }} onDragLeave={dragLeave} onDrop={dropFile}>
           <span>{draggingFile ? "Suelta el archivo aquí" : selectedFileName ? "Documento seleccionado" : "Selecciona o arrastra un archivo PDF, DOCX o TXT"}</span>
           <input name="file" type="file" accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" aria-label="Seleccionar archivo PDF, DOCX o TXT" onChange={event => { setSelectedFileName(event.target.files?.[0]?.name || ""); setUploadFileError(""); }} required />
@@ -171,7 +172,7 @@ export function AnalyzePage({ pendingReviews, savedDocuments, deleteSavedError, 
           <small>Texto legible · máximo 15 MB</small>
         </label>
         {uploadFileError && <p className="error" role="alert">{uploadFileError}</p>}
-        <button className="primary" disabled={busy || !activeCourses.length}>{busy ? "Analizando documento…" : "Analizar documento"}</button>
+        <button className="primary" disabled={busy || (!preview && !activeCourses.length)}>{busy ? "Analizando documento…" : "Analizar documento"}</button>
       </fieldset></form>
       {proposals.length > 0 && <section ref={reviewRef} className="review" aria-labelledby="review-heading" tabIndex={-1}>
         <div className="section-head"><div><h2 id="review-heading">Revisa las propuestas</h2>{reviewFileName && <p className="review-filename">{reviewFileName}</p>}<p className="muted">Edita o descarta antes de guardar.</p></div></div>

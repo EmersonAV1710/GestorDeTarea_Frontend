@@ -33,7 +33,9 @@ export function restoreReviewDraft(review: PendingReview, username: string): Pen
     if (Array.isArray(proposals) && proposals.length > 0 && proposals.length <= 200 && proposals.every(p => p &&
       typeof p.title === "string" && typeof p.description === "string" &&
       (p.due_date === null || typeof p.due_date === "string") && typeof p.review_required === "boolean")) {
-      return { ...review, proposals: parseAnalysis({ document_id: review.document_id, proposals }).proposals };
+      const normalized = parseAnalysis({ document_id: review.document_id,
+        proposals: proposals.map(proposal => ({ ...proposal, title: proposal.title.trim() || "Borrador" })) }).proposals;
+      return { ...review, proposals: normalized.map((proposal, index) => ({ ...proposal, title: proposals[index].title })) };
     }
   } catch {}
   return review;

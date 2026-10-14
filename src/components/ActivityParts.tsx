@@ -1,5 +1,5 @@
 import { compareActivityDates } from "../lib/activityOrder";
-import type { DragEvent } from "react";
+import { useId, useState, type DragEvent, type ReactNode } from "react";
 import { ACTIVITY_TYPES, activityTypeLabel } from "../lib/activityTypes";
 import { localToday } from "../lib/proposals";
 import { dateWarningReason, separateDateWarning, separateYearWarning } from "../lib/activityWarning";
@@ -11,23 +11,46 @@ export function Stat({ label, count }: { label: string; count: number }) {
   return <div className="stat"><span>{label}</span><b>{count}</b></div>;
 }
 
-export function ResetFiltersButton({ onClick }: { onClick: () => void }) {
-  return <button type="button" className="clear filter-reset" aria-label="Restablecer filtros" title="Restablecer filtros" onClick={onClick}>
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M4.5 11a7.5 7.5 0 1 1 1.7 5.9" /><path d="M4.5 5.5V11H10" />
-    </svg>
-  </button>;
+export type ActiveFilter = { key: string; label: string; onRemove: () => void };
+
+export function FilterDisclosure({ children, onReset, className = "", taskCount, activeFilters = [] }: { children: ReactNode; onReset: () => void; className?: string; taskCount?: number; activeFilters?: ActiveFilter[] }) {
+  const [open, setOpen] = useState(false);
+  const contentId = useId();
+  const isTaskFilter = taskCount !== undefined;
+  return <div className={`filter-disclosure ${className}${open ? " is-open" : ""}`}>
+    <div className="filter-disclosure-header">
+      <div className="filter-disclosure-controls">
+        <button type="button" className={`filter-toggle${isTaskFilter ? " task-filter-toggle" : ""}`} aria-expanded={open} aria-controls={contentId} onClick={() => setOpen(value => !value)}>
+          {isTaskFilter
+            ? <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true"><path d="M3 5h14M3 10h14M3 15h14" /><path d="M7 3v4M13 8v4M8 13v4" /></svg>
+            : <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" aria-hidden="true"><path d="M3.5 4.5h13l-5.2 6.2v4.1l-2.6 1.5v-5.6z" /></svg>}
+          {isTaskFilter ? "Filtros" : "Filtrar resultados"}
+          {isTaskFilter && <svg className={`task-filter-chevron${open ? " is-open" : ""}`} viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m4 6 4 4 4-4" /></svg>}
+        </button>
+        {activeFilters.length > 0 && <div className="active-filters" aria-label="Filtros activos">{activeFilters.map(filter =>
+          <button key={filter.key} type="button" className="active-filter" aria-label={`Quitar filtro ${filter.label}`} onClick={filter.onRemove}>
+            <span>{filter.label}</span><span className="active-filter-remove" aria-hidden="true">×</span>
+          </button>
+        )}</div>}
+      </div>
+      {isTaskFilter && <span className="task-filter-count">{taskCount} {taskCount === 1 ? "tarea" : "tareas"}</span>}
+    </div>
+    <div id={contentId} className="filter-disclosure-content" hidden={!open}>
+      <div className="filter-disclosure-fields">{children}</div>
+      <div className="filter-disclosure-actions"><button type="button" className="filter-disclosure-clear" onClick={onReset}>↺ Limpiar filtros</button></div>
+    </div>
+  </div>;
 }
 
-export function Filters({ courses, courseFilter, setCourseFilter, typeFilter, setTypeFilter, from, setFrom, to, setTo }: FilterProps) {
-  return <div className="filters">
+export function Filters({ courses, courseFilter, setCourseFilter, typeFilter, setTypeFilter, statusFilter, setStatusFilter, from, setFrom, to, setTo }: FilterProps) {
+  return <>
     <label>Curso<select value={courseFilter} onChange={e => setCourseFilter(e.target.value)}><option value="">Todos los cursos</option>{courses.map(course => <option value={course.id} key={course.id}>{course.name}</option>)}</select></label>
     <label>Tipo de entrega<select value={typeFilter} onChange={event => setTypeFilter(event.target.value)}><option value="">Todos los tipos</option>{ACTIVITY_TYPES.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}</select></label>
-    <label>Desde<input type="date" value={from} onChange={e => setFrom(e.target.value)} /></label>
-    <label>Hasta<input type="date" value={to} onChange={e => setTo(e.target.value)} /></label>
-    <ResetFiltersButton onClick={() => { setCourseFilter(""); setTypeFilter(""); setFrom(""); setTo(""); }} />
+    <label>Estado<select value={statusFilter} onChange={event => setStatusFilter(event.target.value as FilterProps["statusFilter"])}><option value="">Todas</option><option value="pending">Pendientes</option><option value="completed">Hechas</option></select></label>
+    <label>Desde<span className="task-date-filter"><input type="date" value={from} className={from ? "" : "is-empty"} onChange={e => setFrom(e.target.value)} />{!from && <span className="task-date-placeholder" aria-hidden="true">Fecha inicial</span>}</span></label>
+    <label>Hasta<span className="task-date-filter"><input type="date" value={to} className={to ? "" : "is-empty"} onChange={e => setTo(e.target.value)} />{!to && <span className="task-date-placeholder" aria-hidden="true">Fecha final</span>}</span></label>
     {from && to && from > to && <p className="error" role="alert">La fecha inicial debe ser anterior o igual a la final.</p>}
-  </div>;
+  </>;
 }
 
 export function ActivityList({ items, courses, complete, loaded, reopen, onEdit, onDelete, busy = false, emptyText, draggable = false, draggingId, onDragStart, onDragEnd }: {

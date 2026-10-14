@@ -13,7 +13,7 @@ const items = [
 const proposal = {title:'Entrega final',description:'Descripción',due_date:'2099-01-01',review_required:false,activity_type:'proyecto'};
 const docId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 
-function createHome(storage=new Map(), pending=[], saved=[], initialItems=items, courseRows=courses) {
+function createHome(storage=new Map(), pending=[], saved=[], initialItems=items, courseRows=courses, guestStorage=new Map(), authRoute) {
   const timers=[];
   const state=[],effectDeps=[],effects=[];let cursor=0,effectCursor=0,failUpload=false,failLogout=false,failSavedDelete=false;
   const requests=[];
@@ -31,10 +31,11 @@ function createHome(storage=new Map(), pending=[], saved=[], initialItems=items,
     useEffect(fn,deps){const index=effectCursor++;if(!effectDeps[index]||deps.some((dep,i)=>dep!==effectDeps[index][i])){effectDeps[index]=deps;effects.push(fn);}},
   };
   class FormData {constructor(form){this.form=form;}}
-  const context={exports:{},FormData,localStorage:{getItem(){return null}},sessionStorage:{getItem:key=>storage.get(key)||null,setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)},
-    window:{setTimeout(callback, delay){timers.push({callback,delay});return timers.length},clearTimeout(){}},
+  const context={exports:{},FormData,URLSearchParams,localStorage:{getItem:key=>guestStorage.get(key)||null,setItem:(key,value)=>guestStorage.set(key,value),removeItem:key=>guestStorage.delete(key)},sessionStorage:{getItem:key=>storage.get(key)||null,setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)},
+    window:{setTimeout(callback, delay){timers.push({callback,delay});return timers.length},clearTimeout(){},location:{search:''},history:{pushState(){},replaceState(){}}},
     fetch:async (url,init={})=>{
       const suffix=url.split('/api')[1];requests.push(suffix);let data,status=200;
+      if(storage.get('gestor_token')==='expired' && !suffix.startsWith('/auth/'))return{ok:false,status:401,json:async()=>({detail:'Sesión vencida'})};
       if(suffix==='/auth/login')data={access_token:'fake',username:'test'};
       else if(suffix==='/courses'&&init.method==='POST'){
         const body=JSON.parse(init.body);courseCreations.push(body);
@@ -89,19 +90,25 @@ function createHome(storage=new Map(), pending=[], saved=[], initialItems=items,
       const target=path.resolve(path.dirname(file),id);return load(fs.existsSync(target+'.tsx')?target+'.tsx':target+'.ts');
     }});return exports;
   }
-  const Home=load(path.join(root,'src/app/page.tsx')).default;
-  function render(){cursor=0;effectCursor=0;const tree=Home();while(effects.length)effects.shift()();return tree;}
+  const Home=load(path.join(root,'src/app/TareviaApp.tsx')).default;
+  function render(){cursor=0;effectCursor=0;const tree=Home(authRoute?{authRoute}:undefined);while(effects.length)effects.shift()();return tree;}
   function find(node,predicate){if(!node||typeof node!=='object')return[];return[...(predicate(node)?[node]:[]),...[node.props?.children].flat(Infinity).flatMap(child=>find(child,predicate))];}
-  function page(name){return find(render(),node=>node.type?.name===name)[0];}
+  function page(name){let tree=render();if(tree===null||tree?.props?.className==='session-loading')tree=render();return find(tree,node=>node.type?.name===name)[0];}
   function nav(label){const button=find(render(),node=>node.type==='button'&&String(node.props.className).startsWith('nav')&&node.props.children[1].props.children===label)[0];assert(button);button.props.onClick();render();}
-  return{render,page,nav,storage,pending,saved,timers,find,flushEffects(){while(effects.length)effects.shift()()},requests,confirmations,courseChanges,courseCreations,courseEdits,manualCreations,setFailLogout:value=>{failLogout=value},setFailUpload:value=>{failUpload=value},setFailSavedDelete:value=>{failSavedDelete=value}};
+  return{render,page,nav,storage,guestStorage,pending,saved,timers,find,flushEffects(){while(effects.length)effects.shift()()},requests,confirmations,courseChanges,courseCreations,courseEdits,manualCreations,setFailLogout:value=>{failLogout=value},setFailUpload:value=>{failUpload=value},setFailSavedDelete:value=>{failSavedDelete=value}};
 }
 
 
 
 async function loggedIn(storage, pending, saved, activities, courseRows) {
   const home=createHome(storage,pending,saved,activities,courseRows);
-  await home.page('AuthPage').props.onLogin({preventDefault(){}});
+  if(home.page('AuthPage')===undefined && !home.storage.has('gestor_token')){
+    const signIn=home.find(home.render(),node=>node.type==='button'&&node.props.className==='logout')[0];
+    signIn.props.onClick();
+  }
+  const auth=home.page('AuthPage');
+  if(auth)await auth.props.onLogin({preventDefault(){}});
+  else await new Promise(resolve=>setImmediate(resolve));
   return home;
 }
 async function analyze(home) {
@@ -110,14 +117,116 @@ async function analyze(home) {
   return home.page('AnalyzePage');
 }
 
+test('guest creates local courses and tasks, uses the panel and calendar, and keeps analysis and account data separate', async()=>{
+  const home=createHome();
+  assert(home.page('PanelPage'));
+  assert.equal(home.page('AuthPage'),undefined);
+  assert.equal(home.requests.length,0);
+  home.nav('Cursos');
+  home.page('CoursesPage').props.setNewCourse('Curso invitado');
+  await home.page('CoursesPage').props.onAdd({preventDefault(){}});
+  const courseId=home.page('CoursesPage').props.courses[0].id;
+  home.nav('Mis tareas');
+  await home.page('TasksPage').props.onCreate(courseId,proposal);
+  assert.equal(home.page('TasksPage').props.items[0].title,'Entrega final');
+  home.nav('Calendario');
+  assert.equal(home.page('CalendarPage').props.items[0].course_id,courseId);
+  assert.equal(home.requests.length,0);
+  const reloaded=createHome(new Map(),[],[],items,courses,home.guestStorage);
+  assert(reloaded.page('PanelPage'));
+  assert.equal(reloaded.page('CoursesPage'),undefined);
+  reloaded.nav('Mis tareas');
+  assert.equal(reloaded.page('TasksPage').props.items[0].title,'Entrega final');
+  reloaded.nav('Panel');
+  assert.equal(reloaded.page('PanelPage').props.items.length,1);
+  assert.equal(reloaded.page('PanelPage').props.filters.courses[0].name,'Curso invitado');
+  await reloaded.page('PanelPage').props.complete(reloaded.page('PanelPage').props.items[0].id);
+  assert.equal(reloaded.page('PanelPage').props.items[0].status,'completed');
+  reloaded.page('PanelPage').props.onAnalyze();
+  assert.equal(reloaded.page('AnalyzePage').props.preview,true);
+  assert.equal(reloaded.page('AuthRequiredDialog').props.open,false);
+  await reloaded.page('AnalyzePage').props.onUpload({preventDefault(){},currentTarget:{}});
+  assert.equal(reloaded.page('AuthRequiredDialog').props.open,true);
+  assert.equal(reloaded.requests.length,0);
+  reloaded.page('AuthRequiredDialog').props.onLogin();
+  await reloaded.page('AuthPage').props.onLogin({preventDefault(){}});
+  assert.equal(reloaded.page('AnalyzePage').props.preview,false);
+  reloaded.nav('Cursos');
+  assert.equal(reloaded.page('CoursesPage').props.courses[0].name,'Prueba');
+  assert.equal(JSON.parse(home.guestStorage.get('tarevia_guest_data_v1')).activities.length,1);
+  const logoutButton=reloaded.find(reloaded.render(),node=>node.type==='button'&&node.props.className==='logout')[0];
+  logoutButton.props.onClick();
+  const confirmLogout=reloaded.find(reloaded.render(),node=>node.type==='button'&&node.props.children==='Confirmar')[0];
+  await confirmLogout.props.onClick();
+  assert.equal(reloaded.page('AuthPage'),undefined);
+  assert(reloaded.page('PanelPage'));
+  reloaded.nav('Cursos');
+  assert.equal(reloaded.page('CoursesPage').props.courses[0].name,'Curso invitado');
+  assert.equal(reloaded.page('CoursesPage').props.items.length,1);
+});
+
+test('a missing session opens the panel, while direct login and registration routes stay voluntary',()=>{
+  const home=createHome();
+  assert(home.page('PanelPage'));
+  assert.equal(home.page('AuthPage'),undefined);
+  assert.equal(home.requests.length,0);
+
+  const login=createHome(new Map(),[],[],items,courses,new Map(),'login');
+  assert.equal(login.page('AuthPage').props.authMode,'login');
+  assert.equal(login.requests.length,0);
+  login.page('AuthPage').props.onContinueAsGuest();
+  assert(login.page('PanelPage'));
+
+  const register=createHome(new Map(),[],[],items,courses,new Map(),'register');
+  assert.equal(register.page('AuthPage').props.authMode,'register');
+});
+
+test('an expired session falls back to the guest panel without exposing account activities',async()=>{
+  const storage=new Map([['gestor_token','expired'],['gestor_username','private']]);
+  const home=createHome(storage);
+  home.page('PanelPage');
+  await new Promise(resolve=>setImmediate(resolve));
+  assert(home.page('PanelPage'));
+  assert.equal(home.page('PanelPage').props.items.length,0);
+  assert.equal(home.page('AuthPage'),undefined);
+  assert.equal(storage.has('gestor_token'),false);
+  assert.equal(home.requests.includes('/documents'),true);
+});
+
 test('panel exposes overdue and undated tasks and its filters do not affect Mis tareas', async()=>{
   const home=await loggedIn();
   const panel=home.page('PanelPage');
   assert.equal(panel.props.overdue[0].id,'overdue');
   assert.equal(panel.props.undated[0].id,'undated');
   panel.props.filters.setCourseFilter('course');
+  panel.props.filters.setUpcomingWeeks(2);
   home.nav('Mis tareas');
   assert.equal(home.page('TasksPage').props.filters.courseFilter,'');
+  home.nav('Panel');
+  assert.equal(home.page('PanelPage').props.filters.upcomingWeeks,2);
+});
+
+test('panel combines course, type and completed status across dated and undated activities', async()=>{
+  const other={id:'other',name:'Otro curso',code:null,term:null,is_active:true};
+  const rows=[
+    {id:'old-done',title:'Hecha anterior',status:'completed',course_id:'other',activity_type:'examen',due_date:'2000-01-01'},
+    {id:'no-date-done',title:'Hecha sin fecha',status:'completed',course_id:'other',activity_type:'examen',due_date:null},
+    {id:'future-done',title:'Hecha futura',status:'completed',course_id:'other',activity_type:'examen',due_date:'2099-01-01'},
+    {id:'pending',title:'Pendiente',status:'pending',course_id:'other',activity_type:'examen',due_date:'2000-01-01'},
+    {id:'other-type',title:'Otro tipo',status:'completed',course_id:'other',activity_type:'tarea',due_date:'2000-01-01'},
+    {id:'other-course',title:'Otro curso',status:'completed',course_id:'course',activity_type:'examen',due_date:'2000-01-01'},
+  ];
+  const home=await loggedIn(new Map(),[],[],rows,[...courses,other]);
+  home.page('PanelPage').props.filters.setCourseFilter('other');
+  home.page('PanelPage').props.filters.setTypeFilter('examen');
+  home.page('PanelPage').props.filters.setStatusFilter('completed');
+  const panel=home.page('PanelPage');
+  assert.deepEqual(Array.from(panel.props.upcoming, item=>item.id),['future-done']);
+  assert.deepEqual(Array.from(panel.props.pastCompleted, item=>item.id),['old-done']);
+  assert.deepEqual(Array.from(panel.props.undated, item=>item.id),['no-date-done']);
+  assert.equal(panel.props.overdue.length,0);
+  home.nav('Mis tareas');
+  assert.equal(home.page('TasksPage').props.filters.statusFilter,'');
 });
 
 test('the compact navigation opens from the three-line button and closes after choosing a section', async()=>{
@@ -237,9 +346,11 @@ test('pending reviews restore corrections after reload, including temporarily em
   const page=await analyze(home);
   page.props.onEdit(0,'title','');
   home.render();
+  assert.equal(JSON.parse(home.storage.get(`tarevia-review:test:${docId}`))[0].title,'');
   const reloaded=await loggedIn(home.storage,home.pending);
   reloaded.nav('Analizar documento');
   const review=reloaded.page('AnalyzePage').props.pendingReviews[0];
+  assert.equal(review.proposals[0].title,'');
   const reveal=[];
   reloaded.page('AnalyzePage').props.reviewRef.current={
     scrollIntoView(options){reveal.push(['scroll',options.block]);},
@@ -478,7 +589,8 @@ test('logout asks the server to revoke the token before clearing the local sessi
   await button.props.onClick();
   assert.equal(home.requests.includes('/auth/logout'),true);
   assert.equal(home.storage.has('gestor_token'),false);
-  assert(home.page('AuthPage'));
+  assert(home.page('PanelPage'));
+  assert.equal(home.page('AuthPage'),undefined);
 });
 
 test('failed logout keeps the session and shows the error inside the confirmation dialog', async()=>{
