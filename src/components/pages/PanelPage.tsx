@@ -1,11 +1,13 @@
-import { useEffect, useState } from "react";
+import { locale, t } from "../../lib/language";
+import { useEffect, useId, useState } from "react";
 import { compareActivityDates } from "../../lib/activityOrder";
-import { ACTIVITY_TYPES, activityTypeLabel } from "../../lib/activityTypes";
 import { localToday } from "../../lib/proposals";
-import { ActivityList, FilterDisclosure, Stat, type ActiveFilter } from "../ActivityParts";
+import { TaskCourseChart } from "../TaskCourseChart";
 import type { Activity, FilterProps } from "../types";
 
 type Props = {
+  username: string;
+  onOpenTask: (id: string) => void;
   items: Activity[];
   upcoming: Activity[];
   overdue?: Activity[];
@@ -35,54 +37,66 @@ export function upcomingActivities(activities: Activity[], today = localToday())
   return activities.filter(activity => activity.due_date && activity.due_date >= today).sort(compareActivityDates);
 }
 
-export function PanelPage({ items, upcoming, overdue = [], undated = [], pastCompleted = [], busy = false, filters, loaded, complete, reopen, onAnalyze, onShowAll }: Props) {
-  const [overdueCount, setOverdueCount] = useState(6);
-  const [showAllUndated, setShowAllUndated] = useState(false);
+export function PanelPage({ items, filters, loaded, onAnalyze, onShowAll, username, onOpenTask }: Props) {
+  const ringMaskId = useId();
+  const progressSummaryId = useId();
+  const [hour, setHour] = useState<number | null>(null);
   useEffect(() => {
-    setOverdueCount(6);setShowAllUndated(false);
-  }, [filters.courseFilter, filters.typeFilter, filters.statusFilter]);
-  const ordered = upcomingWithinWeeks(upcoming, filters.upcomingWeeks).sort(compareActivityDates);
-  const activeFilters: ActiveFilter[] = [];
-  if (filters.courseFilter) activeFilters.push({ key: "course", label: `Curso: ${filters.courses.find(course => course.id === filters.courseFilter)?.name || "Curso"}`, onRemove: () => filters.setCourseFilter("") });
-  if (filters.typeFilter) activeFilters.push({ key: "type", label: `Tipo: ${activityTypeLabel(filters.typeFilter)}`, onRemove: () => filters.setTypeFilter("") });
-  if (filters.statusFilter) activeFilters.push({ key: "status", label: `Estado: ${filters.statusFilter === "completed" ? "Hechas" : "Pendientes"}`, onRemove: () => filters.setStatusFilter("") });
-  if (filters.upcomingWeeks !== null) activeFilters.push({ key: "weeks", label: `Próximas: ${filters.upcomingWeeks} ${filters.upcomingWeeks === 1 ? "semana" : "semanas"}`, onRemove: () => filters.setUpcomingWeeks(null) });
-  function resetFilters() {
-    filters.setCourseFilter(""); filters.setTypeFilter(""); filters.setStatusFilter(""); filters.setUpcomingWeeks(null);
-  }
-
-  return <>
-    <div className="welcome"><div><h1>Panel</h1><p className="muted">Tus actividades de un vistazo.</p></div><button className="primary" onClick={onAnalyze}>Analizar documento</button></div>
-    <div className="stats">
-      <Stat label="Pendientes" count={items.filter(item => item.status === "pending").length} />
-      <Stat label="Próximas" count={ordered.length} />
-      <Stat label="Completadas" count={items.filter(item => item.status === "completed").length} />
+    const update = () => setHour(new Date().getHours());
+    update();
+    const timer = window.setInterval(update, 60000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const greeting = hour === null ? t("Hola") : hour < 6 || hour >= 19 ? t("Buenas noches") : hour < 12 ? t("Buenos días") : t("Buenas tardes");
+  const completed = items.filter(item => item.status === "completed").length;
+  const total = items.length;
+  const percent = total ? Math.round(completed / total * 100) : 0;
+  const pending = items.filter(item => item.status !== "completed");
+  const upcomingTasks = upcomingActivities(pending).slice(0, 4);
+  const late = pending.filter(item => item.due_date && item.due_date < localToday()).length;
+  return <div className="panel-overview">
+    <div className="welcome"><div><h1>{greeting}, {username}.</h1><p className="muted">{t("Tus actividades de un vistazo.")}</p></div><button className="primary" onClick={onAnalyze}>{t("Analizar documento")}</button></div>
+    <div className="panel-summary-grid">
+      <section className="panel panel-ring-card" aria-labelledby="progress-title">
+        <div><span className="progress-kicker">{t("Paso a paso")}</span><h2 id="progress-title">{t("Mi progreso")}</h2></div>
+        <div className="panel-progress-interactive"><div className="panel-progress-ring" tabIndex={0} aria-describedby={progressSummaryId} role="progressbar" aria-label={t("Progreso de tareas completadas")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
+          <svg viewBox="0 0 200 200" aria-hidden="true">
+            <defs><mask id={ringMaskId}><circle className="ring-reveal" cx="100" cy="100" r="82" pathLength="100" stroke="white" strokeDasharray={`${percent} 100`}/></mask></defs>
+            <circle className="ring-track" cx="100" cy="100" r="82"/>
+            <g mask={`url(#${ringMaskId})`}>
+              <circle className="ring-value" cx="100" cy="100" r="82"/>
+              {loaded && percent > 0 && <g className="ring-sparkles"><g className="ring-lines-orbit">
+                {Array.from({ length: 64 }, (_, index) => {
+                  const angle = index * Math.PI / 32;
+                  const x = 100 + 82 * Math.cos(angle);
+                  const y = 100 + 82 * Math.sin(angle);
+                  return <line key={index} className="ring-horizontal-line" x1={x} y1={y - 2.2} x2={x} y2={y + 2.2} />;
+                })}
+              </g></g>}
+            </g>
+          </svg>
+          <div><strong>{loaded ? `${percent}%` : "—"}</strong><span>{t("completado")}</span></div>
+        </div>
+        <div id={progressSummaryId} className="panel-progress-tooltip" role="tooltip">
+          <strong>{t("Resumen de tareas")}</strong>
+          <dl>{[
+            { kind: "total", label: t("Total de tareas"), count: total },
+            { kind: "completed", label: t("Completadas"), count: completed },
+            { kind: "pending", label: t("Pendientes"), count: pending.length },
+            { kind: "overdue", label: t("Vencidas"), count: late },
+          ].map(({ kind, label, count }) => <div key={kind} data-task-kind={kind}><dt>{label}</dt><dd>{loaded ? count : "\u2014"}</dd></div>)}</dl>
+        </div></div>
+        <p className="muted">{loaded ? `${completed} ${t("de")} ${total} ${t("tareas completadas")}` : t("Cargando…")}</p>
+      </section>
+      <section className="panel panel-upcoming-card" aria-labelledby="upcoming-title">
+        <div className="section-head"><div><span className="progress-kicker">{t("Tu agenda")}</span><h2 id="upcoming-title">{t("Actividades próximas")}</h2></div><button className="text-button" onClick={onShowAll}>{t("Ver todas")}</button></div>
+        {!loaded ? <p className="muted" role="status">{t("Cargando…")}</p> : upcomingTasks.length ? <div className="panel-task-previews">{upcomingTasks.map(activity => <button type="button" className="panel-task-preview" key={activity.id} onClick={() => onOpenTask(activity.id)} aria-label={`${t("Ver detalles")}: ${activity.title}`}>
+          <span className="panel-preview-mark" aria-hidden="true"/><span className="panel-preview-copy"><strong>{activity.title}</strong><span>{filters.courses.find(course => course.id === activity.course_id)?.name || t("Curso")}</span></span>
+          <time dateTime={activity.due_date!}>{new Date(`${activity.due_date}T12:00:00`).toLocaleDateString(locale(), { day: "numeric", month: "short" })}</time><span aria-hidden="true">↗</span>
+        </button>)}</div> : <div className="panel-agenda-empty"><span aria-hidden="true">↗</span><h3>{t("Tu agenda está despejada")}</h3><p className="muted">{t("No tienes tareas pendientes con una fecha próxima.")}</p></div>}
+      </section>
     </div>
-    <section className="panel">
-      <div className="section-head"><div><h2>Actividades próximas</h2><p className="muted">Filtra por curso, tipo de entrega, estado y semanas.</p></div><button className="text-button" onClick={onShowAll}>Ver todas</button></div>
-      <FilterDisclosure className="panel-filter-disclosure" activeFilters={activeFilters} onReset={resetFilters}>
-        <label>Curso<select value={filters.courseFilter} onChange={event => filters.setCourseFilter(event.target.value)}><option value="">Todos los cursos</option>{filters.courses.map(course => <option value={course.id} key={course.id}>{course.name}</option>)}</select></label>
-        <label>Tipo de entrega<select value={filters.typeFilter} onChange={event => filters.setTypeFilter(event.target.value)}><option value="">Todos los tipos</option>{ACTIVITY_TYPES.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}</select></label>
-        <label>Estado<select value={filters.statusFilter} onChange={event => filters.setStatusFilter(event.target.value as FilterProps["statusFilter"])}><option value="">Todos los estados</option><option value="pending">Pendientes</option><option value="completed">Hechas</option></select></label>
-        <label>Próximas entregas<select value={filters.upcomingWeeks ?? "all"} onChange={event => filters.setUpcomingWeeks(event.target.value === "all" ? null : Number(event.target.value))}>
-          <option value="1">1 semana</option><option value="2">2 semanas</option><option value="4">4 semanas</option><option value="all">Todas</option>
-        </select></label>
-      </FilterDisclosure>
-      <ActivityList emptyText="No hay actividades próximas en este plazo con estos filtros." items={ordered} courses={filters.courses} complete={complete} reopen={reopen} loaded={loaded} busy={busy} />
-      {overdue.length > 0 && <section className="panel-task-group" aria-labelledby="overdue-title">
-        <header className="task-column-header"><h3 id="overdue-title">Vencidas</h3><span className="task-count">{overdue.length}</span></header>
-        <ActivityList items={[...overdue].sort(compareActivityDates).slice(0, overdueCount)} courses={filters.courses} complete={complete} loaded={loaded} busy={busy} />
-        {overdueCount < overdue.length && <button type="button" className="action-button" onClick={() => setOverdueCount(count => count + 6)}>Ver más tareas vencidas</button>}
-      </section>}
-      {pastCompleted.length > 0 && <section className="panel-task-group" aria-labelledby="past-completed-title">
-        <header className="task-column-header"><h3 id="past-completed-title">Hechas anteriores</h3><span className="task-count">{pastCompleted.length}</span></header>
-        <ActivityList items={pastCompleted} courses={filters.courses} complete={complete} reopen={reopen} loaded={loaded} busy={busy} />
-      </section>}
-      {undated.length > 0 && <details className="panel-task-group panel-undated" aria-labelledby="undated-title">
-        <summary><h3 id="undated-title">Sin fecha</h3><span className="task-count">{undated.length}</span><svg className="panel-undated-chevron" viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 8 4 4 4-4" /></svg></summary>
-        <ActivityList items={showAllUndated ? undated : undated.slice(0, 6)} courses={filters.courses} complete={complete} loaded={loaded} busy={busy} />
-        {undated.length > 6 && <button type="button" className="action-button" aria-label={showAllUndated ? "Ver menos tareas sin fecha" : "Ver más tareas sin fecha"} aria-expanded={showAllUndated} onClick={() => setShowAllUndated(value => !value)}>{showAllUndated ? "Ver menos" : "Ver más"}</button>}
-      </details>}
-    </section>
-  </>;
+    <section className="panel panel-count-card" aria-labelledby="task-summary-title"><span id="task-summary-title" className="progress-kicker">{t("Resumen general")}</span><dl className="panel-task-counts">{[[t("Total de tareas"),total],[t("Pendientes"),pending.length],[t("Completadas"),completed],[t("Vencidas"),late]].map(([label,count]) => <div key={label}><dt>{label}</dt><dd>{loaded ? count : "—"}</dd></div>)}</dl></section>
+    <TaskCourseChart items={items} courses={filters.courses} loaded={loaded} />
+  </div>;
 }

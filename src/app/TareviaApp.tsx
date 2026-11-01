@@ -1,4 +1,5 @@
 "use client";
+import { t as translate, useLanguage } from "../lib/language";
 import {useEffect,useMemo,useRef,useState} from "react";
 import { clearReviewDraft, parsePendingReviews, parseSavedDocuments, restoreReviewDraft, storeReviewDraft, type PendingReview, type SavedDocument } from "../lib/reviewDraft";
 import { compareActivityDates } from "../lib/activityOrder";
@@ -40,13 +41,14 @@ function useTimedMessage(autoClose = true) {
  return [message,update,version] as const;
 }
 export default function Home({ authRoute }: { authRoute?: "login" | "register" } = {}){
+ useLanguage();
  const [access,setAccess]=useState<AccessState>("checking");
  const permissions=accessPermissions(access);
  const [restrictedOpen,setRestrictedOpen]=useState(false);
  const guestDataRef=useRef<GuestData>(emptyGuestData());
  const guestDataReadable=useRef(true);
  const postAuthSection=useRef("panel");
- const [token,setToken]=useState(""); const [email,setEmail]=useState(""); const [username,setUsername]=useState(""); const [password,setPassword]=useState(""); const [passwordConfirmation,setPasswordConfirmation]=useState(""); const [authMode,setAuthMode]=useState<"login"|"register">("login"); const [authError,setAuthError,authErrorId]=useTimedMessage(); const [courses,setCourses]=useState<Course[]>([]); const [items,setItems]=useState<Activity[]>([]); const [courseFilter,setCourseFilter]=useState(""); const [typeFilter,setTypeFilter]=useState(""); const [statusFilter,setStatusFilter]=useState<ActivityStatusFilter>(""); const [from,setFrom]=useState(""); const [to,setTo]=useState(""); const [section,setSection]=useState("panel"); const [taskView,setTaskView]=useState<"board"|"list">("board"); const [logoutOpen,setLogoutOpen]=useState(false); const [mobileMenuOpen,setMobileMenuOpen]=useState(false); const [busy,setBusy]=useState(false); const [error,setError,errorId]=useTimedMessage(); const [notice,setNotice,noticeId]=useTimedMessage(); const [newCourse,setNewCourse]=useState(""); const [newCourseCode,setNewCourseCode]=useState(""); const [newCourseTerm,setNewCourseTerm]=useState(""); const [editingCourse,setEditingCourse]=useState<Course|null>(null); const [confirmDeactivateId,setConfirmDeactivateId]=useState(""); const [uploadCourse,setUploadCourse]=useState(""); const [selectedFileName,setSelectedFileName]=useState(""); const [proposals,setProposals]=useState<Proposal[]>([]); const [docId,setDocId]=useState(""); const [loaded,setLoaded]=useState(false);
+ const [token,setToken]=useState(""); const [email,setEmail]=useState(""); const [username,setUsername]=useState(""); const [password,setPassword]=useState(""); const [passwordConfirmation,setPasswordConfirmation]=useState(""); const [authMode,setAuthMode]=useState<"login"|"register">("login"); const [authError,setAuthError,authErrorId]=useTimedMessage(); const [courses,setCourses]=useState<Course[]>([]); const [items,setItems]=useState<Activity[]>([]); const [courseFilter,setCourseFilter]=useState(""); const [typeFilter,setTypeFilter]=useState(""); const [statusFilter,setStatusFilter]=useState<ActivityStatusFilter>(""); const [from,setFrom]=useState(""); const [to,setTo]=useState(""); const [section,setSection]=useState("panel"); const [focusedTaskId,setFocusedTaskId]=useState(""); const [taskView,setTaskView]=useState<"board"|"list">("board"); const [logoutOpen,setLogoutOpen]=useState(false); const [mobileMenuOpen,setMobileMenuOpen]=useState(false); const [busy,setBusy]=useState(false); const [error,setError,errorId]=useTimedMessage(); const [notice,setNotice,noticeId]=useTimedMessage(); const [newCourse,setNewCourse]=useState(""); const [newCourseCode,setNewCourseCode]=useState(""); const [newCourseTerm,setNewCourseTerm]=useState(""); const [editingCourse,setEditingCourse]=useState<Course|null>(null); const [confirmDeactivateId,setConfirmDeactivateId]=useState(""); const [uploadCourse,setUploadCourse]=useState(""); const [selectedFileName,setSelectedFileName]=useState(""); const [proposals,setProposals]=useState<Proposal[]>([]); const [docId,setDocId]=useState(""); const [loaded,setLoaded]=useState(false);
  const [logoutError,setLogoutError]=useState("");
  const [pendingReviews,setPendingReviews]=useState<PendingReview[]>([]);
  const [savedDocuments,setSavedDocuments]=useState<SavedDocument[]>([]);
@@ -111,23 +113,35 @@ export default function Home({ authRoute }: { authRoute?: "login" | "register" }
   setLoaded(false);setSection("panel");setTaskView("board");setLogoutOpen(false);setMobileMenuOpen(false);setNotice("");setError("");setPassword("");setPasswordConfirmation("");
  }
  const request=async(path:string,init:RequestInit={})=>{
-  if(!permissions.privateApi||!token)throw Error("Inicia sesión para utilizar esta función.");
+  if(!permissions.privateApi||!token)throw Error(translate("Inicia sesión para utilizar esta función."));
   const version=sessionVersion.current;
   const res=await fetch(API+path,{...init,headers:{...(init.body instanceof FormData?{}:{"Content-Type":"application/json"}),...(token?{Authorization:`Bearer ${token}`}:{}) ,...init.headers}});
   const body=res.status===204?null:await res.json().catch(()=>null);
-  if(version!==sessionVersion.current)throw Error("La sesión cambió. Inicia la operación de nuevo.");
-  if(res.status===401){clearAccount();enterGuest();setError("Tu sesión venció. Continúas en modo invitado.");}
+  if(version!==sessionVersion.current)throw Error(translate("La sesión cambió. Inicia la operación de nuevo."));
+  if(res.status===401){clearAccount();enterGuest();setError(translate("Tu sesión venció. Continúas en modo invitado."));}
   if(!res.ok)throw Error(apiError(body,`Error ${res.status}`));
   return body;
  };
  async function loadAccount(t:string,draftUsername:string){
   const headers={Authorization:`Bearer ${t}`};
-  const [c,a,d,s]=await Promise.all([fetch(API+"/courses",{headers}),fetch(API+"/activities",{headers}),fetch(API+"/documents/pending",{headers}),fetch(API+"/documents",{headers})]);
-  if(c.status===401||a.status===401||d.status===401||s.status===401)throw new SessionExpiredError("Tu sesión venció. Ingresa de nuevo.");
-  if(!c.ok||!a.ok||!d.ok||!s.ok)throw Error("No se pudo cargar la información. Inténtalo de nuevo.");
+  const [c,a,d,s]=await Promise.all([fetch(API+"/courses",{headers,cache:"no-store"}),fetch(API+"/activities",{headers,cache:"no-store"}),fetch(API+"/documents/pending",{headers,cache:"no-store"}),fetch(API+"/documents",{headers,cache:"no-store"})]);
+  if(c.status===401||a.status===401||d.status===401||s.status===401)throw new SessionExpiredError(translate("Tu sesión venció. Ingresa de nuevo."));
+  if(!c.ok||!a.ok||!d.ok||!s.ok)throw Error(translate("No se pudo cargar la información. Inténtalo de nuevo."));
   const [courses,items]=await Promise.all([c.json(),a.json()]);
-  if(!Array.isArray(courses)||!Array.isArray(items))throw Error("El servidor devolvió información inválida.");
+  if(!Array.isArray(courses)||!Array.isArray(items))throw Error(translate("El servidor devolvió información inválida."));
   return {courses,items,pendingReviews:parsePendingReviews(await d.json()).map(review=>restoreReviewDraft(review,draftUsername)),savedDocuments:parseSavedDocuments(await s.json())};
+ }
+ async function refreshTaskList(){
+  if(busy)return;
+  setBusy(true);setError("");
+  try {
+   if(permissions.localData){
+    const data=readGuestData(localStorage);
+    guestDataRef.current=data;guestDataReadable.current=true;
+    setCourses(data.courses);setItems(data.activities);setLoaded(true);
+   } else await refresh();
+  } catch(e){setError(e instanceof Error?e.message:translate("Error de conexi\u00f3n"))}
+  finally{setBusy(false)}
  }
  async function refresh(){
   if(!token)return;
@@ -135,8 +149,8 @@ export default function Home({ authRoute }: { authRoute?: "login" | "register" }
   try{const data=await loadAccount(token,username);if(version!==sessionVersion.current)return;setCourses(data.courses);setItems(data.items);setPendingReviews(data.pendingReviews);setSavedDocuments(data.savedDocuments);setLoaded(true)}
   catch(e){
    if(version!==sessionVersion.current)return;
-   if(e instanceof SessionExpiredError){clearAccount();enterGuest();setError("Tu sesión venció. Continúas en modo invitado.")}
-   else setError(e instanceof Error?e.message:"Error de conexión");
+   if(e instanceof SessionExpiredError){clearAccount();enterGuest();setError(translate("Tu sesión venció. Continúas en modo invitado."))}
+   else setError(e instanceof Error?e.message:translate("Error de conexión"));
   }
  }
  useEffect(()=>{
@@ -145,25 +159,25 @@ export default function Home({ authRoute }: { authRoute?: "login" | "register" }
   let t:string|null=null;
   let savedUsername="";
   try {t=sessionStorage.getItem("gestor_token");savedUsername=sessionStorage.getItem("gestor_username")||""}
-  catch {setError("No se pudo acceder a la sesión guardada. Continúas en modo invitado.")}
+  catch {setError(translate("No se pudo acceder a la sesión guardada. Continúas en modo invitado."))}
   if(t)void loadAccount(t,savedUsername).then(data=>{
    if(cancelled||version!==sessionVersion.current)return;
    setToken(t);setAccess("authenticated");setUsername(savedUsername.toUpperCase());setCourses(data.courses);setItems(data.items);setPendingReviews(data.pendingReviews);setSavedDocuments(data.savedDocuments);setLoaded(true);setSection("panel");
    if(authRoute)window.history.replaceState({},"","/");
-  }).catch(e=>{if(!cancelled&&version===sessionVersion.current){clearAccount();enterGuest();if(authRoute)window.history.replaceState({},"","/");if(!(e instanceof SessionExpiredError))setError(e instanceof Error?e.message:"No se pudo verificar la sesión.")}});
+  }).catch(e=>{if(!cancelled&&version===sessionVersion.current){clearAccount();enterGuest();if(authRoute)window.history.replaceState({},"","/");if(!(e instanceof SessionExpiredError))setError(e instanceof Error?e.message:translate("No se pudo verificar la sesión."))}});
   else if(authRoute)setAccess("signedOut");
   else enterGuest();
   return ()=>{cancelled=true};
  },[]);
  function commitGuestData(next:GuestData){
-  if(!guestDataReadable.current)throw Error("Los datos locales no se pudieron leer. No se sobrescribirán.");
+  if(!guestDataReadable.current)throw Error(translate("Los datos locales no se pudieron leer. No se sobrescribirán."));
   saveGuestData(localStorage,next);
   guestDataRef.current=next;setCourses(next.courses);setItems(next.activities);
  }
  function enterGuest(){
   let data=emptyGuestData();
   try {data=readGuestData(localStorage);guestDataReadable.current=true}
-  catch(e){guestDataReadable.current=false;setError(e instanceof Error?e.message:"No se pudieron cargar los datos locales.")}
+  catch(e){guestDataReadable.current=false;setError(e instanceof Error?e.message:translate("No se pudieron cargar los datos locales."))}
   guestDataRef.current=data;setCourses(data.courses);setItems(data.activities);
   setPendingReviews([]);setSavedDocuments([]);setToken("");setUsername("");
   setLoaded(true);setSection("panel");setAuthError("");setAccess("guest");
@@ -187,7 +201,7 @@ export default function Home({ authRoute }: { authRoute?: "login" | "register" }
   uploadFormRef.current?.reset();setSelectedFileName("");setUploadCourse(restored.course_id);
   setDocId(restored.document_id);setReviewCourseId(restored.course_id);setReviewFileName(restored.filename);
   setResumeTargetId(restored.document_id);
-  setProposals([...restored.proposals].sort(compareActivityDates));setError("");setNotice("Revisión lista para continuar.");
+  setProposals([...restored.proposals].sort(compareActivityDates));setError("");setNotice(translate("Revisión lista para continuar."));
  }
  async function changeReviewCourse(courseId:string){
   if(actionPending.current||!docId||courseId===reviewCourseId)return;
@@ -197,10 +211,10 @@ export default function Home({ authRoute }: { authRoute?: "login" | "register" }
   try{
    const updated=await request(`/documents/${documentId}`,{method:"PATCH",body:JSON.stringify({course_id:courseId})});
    if(version!==sessionVersion.current)return;
-   if(updated.document_id!==documentId||updated.course_id!==courseId)throw Error("El servidor no confirmó el cambio de curso.");
+   if(updated.document_id!==documentId||updated.course_id!==courseId)throw Error(translate("El servidor no confirmó el cambio de curso."));
    setReviewCourseId(courseId);
-   setNotice("Curso de la revisión actualizado.");
-  }catch(e){if(version===sessionVersion.current)setError(e instanceof Error?e.message:"No se pudo cambiar el curso de la revisión.")}
+   setNotice(translate("Curso de la revisión actualizado."));
+  }catch(e){if(version===sessionVersion.current)setError(e instanceof Error?e.message:translate("No se pudo cambiar el curso de la revisión."))}
   finally{actionPending.current=false;setBusy(false)}
  }
  async function deleteReview(documentId:string){
@@ -216,8 +230,8 @@ export default function Home({ authRoute }: { authRoute?: "login" | "register" }
     setDocId("");setReviewCourseId("");setReviewFileName("");setResumeTargetId("");setProposals([]);
     setUploadCourse("");setSelectedFileName("");uploadFormRef.current?.reset();
    }
-   setNotice("Revisión pendiente eliminada.");
-  }catch(e){if(version===sessionVersion.current)setError(e instanceof Error?e.message:"No se pudo quitar la revisión.")}
+   setNotice(translate("Revisión pendiente eliminada."));
+  }catch(e){if(version===sessionVersion.current)setError(e instanceof Error?e.message:translate("No se pudo quitar la revisión."))}
   finally{actionPending.current=false;setBusy(false)}
  }
  async function deleteSavedDocument(documentId:string){
@@ -229,53 +243,66 @@ export default function Home({ authRoute }: { authRoute?: "login" | "register" }
    if(version!==sessionVersion.current)return false;
    setSavedDocuments(previous=>previous.filter(document=>document.document_id!==documentId));
    setItems(previous=>previous.filter(activity=>activity.document_id!==documentId));
-   setNotice("Documento y actividades asociadas eliminados.");
+   setNotice(translate("Documento y actividades asociadas eliminados."));
    return true;
-  }catch(e){if(version===sessionVersion.current)setDeleteSavedError(e instanceof Error?e.message:"No se pudo borrar el documento.");return false}
+  }catch(e){if(version===sessionVersion.current)setDeleteSavedError(e instanceof Error?e.message:translate("No se pudo borrar el documento."));return false}
   finally{actionPending.current=false;setBusy(false)}
  }
  async function login(e:React.FormEvent){
   e.preventDefault();if(actionPending.current)return;actionPending.current=true;setBusy(true);setAccess("authenticating");setAuthError("");
   try{
    const r=await fetch(API+"/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username,password})});
-   const d=await r.json();if(!r.ok)throw Error(apiError(d,"No se pudo iniciar sesión"));
+   const d=await r.json();if(!r.ok)throw Error(apiError(d,translate("No se pudo iniciar sesión")));
    const data=await loadAccount(d.access_token,d.username);
    sessionStorage.setItem("gestor_token",d.access_token);sessionStorage.setItem("gestor_username",d.username.toUpperCase());
    sessionVersion.current+=1;setUsername(d.username.toUpperCase());setToken(d.access_token);setPassword("");
    setCourses(data.courses);setItems(data.items);setPendingReviews(data.pendingReviews);setSavedDocuments(data.savedDocuments);setLoaded(true);setNotice("");
    setCourseFilter("");setPanelCourseFilter("");setSection(postAuthSection.current);postAuthSection.current="panel";setAccess("authenticated");
    window.history.replaceState({},"","/");
-  }catch(e){setAccess("signedOut");setAuthError(e instanceof Error?e.message:"Error de conexión")}
+  }catch(e){setAccess("signedOut");setAuthError(e instanceof Error?e.message:translate("Error de conexión"))}
   finally{actionPending.current=false;setBusy(false)}
  }
- async function register(e:React.FormEvent){e.preventDefault();setBusy(true);setAccess("authenticating");setAuthError("");try{const r=await fetch(API+"/auth/register",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,username,password,password_confirmation:passwordConfirmation})});const d=await r.json();if(!r.ok)throw Error(apiError(d,"No se pudo crear la cuenta"));setUsername(d.username.toUpperCase());setAuthMode("login");window.history.replaceState({},"","/login");setPassword("");setPasswordConfirmation("");setNotice("Cuenta creada. Inicia sesión con tu usuario.")}catch(e){setAuthError(e instanceof Error?e.message:"Error de conexión")}finally{setAccess("signedOut");setBusy(false)}}
- async function addCourse(e:React.FormEvent):Promise<boolean>{e.preventDefault();setBusy(true);setError("");setNotice("");try{if(permissions.localData)commitGuestData(addGuestCourse(guestDataRef.current,newCourse,newCourseCode,newCourseTerm));else{await request("/courses",{method:"POST",body:JSON.stringify({name:newCourse,code:newCourseCode||null,term:newCourseTerm||null})});await refresh()}setNewCourse("");setNewCourseCode("");setNewCourseTerm("");setNotice("Curso añadido.");return true}catch(e){setError(e instanceof Error?e.message:String(e));return false}finally{setBusy(false)}}
+ async function register(e:React.FormEvent){e.preventDefault();setBusy(true);setAccess("authenticating");setAuthError("");try{const r=await fetch(API+"/auth/register",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,username,password,password_confirmation:passwordConfirmation})});const d=await r.json();if(!r.ok)throw Error(apiError(d,translate("No se pudo crear la cuenta")));setUsername(d.username.toUpperCase());setAuthMode("login");window.history.replaceState({},"","/login");setPassword("");setPasswordConfirmation("");setNotice(translate("Cuenta creada. Inicia sesión con tu usuario."))}catch(e){setAuthError(e instanceof Error?e.message:translate("Error de conexión"))}finally{setAccess("signedOut");setBusy(false)}}
+ async function addCourse(e:React.FormEvent):Promise<boolean>{e.preventDefault();setBusy(true);setError("");setNotice("");try{if(permissions.localData)commitGuestData(addGuestCourse(guestDataRef.current,newCourse,newCourseCode,newCourseTerm));else{await request("/courses",{method:"POST",body:JSON.stringify({name:newCourse,code:newCourseCode||null,term:newCourseTerm||null})});await refresh()}setNewCourse("");setNewCourseCode("");setNewCourseTerm("");setNotice(translate("Curso añadido."));return true}catch(e){setError(e instanceof Error?e.message:String(e));return false}finally{setBusy(false)}}
  async function saveCourse(e:React.FormEvent){
   e.preventDefault();if(!editingCourse)return;
   setBusy(true);setError("");setNotice("");
   try{
    if(permissions.localData){
     commitGuestData(updateGuestCourse(guestDataRef.current,editingCourse));
-    setEditingCourse(null);setNotice("Curso actualizado.");return;
+    setEditingCourse(null);setNotice(translate("Curso actualizado."));return;
    }
    await request(`/courses/${editingCourse.id}`,{method:"PATCH",body:JSON.stringify({name:editingCourse.name,code:editingCourse.code||null,term:editingCourse.term||null})});
-   setEditingCourse(null);setNotice("Curso actualizado.");await refresh();
+   setEditingCourse(null);setNotice(translate("Curso actualizado."));await refresh();
   }catch(e){setError(e instanceof Error?e.message:String(e))}finally{setBusy(false)}
  }
  async function changeCourseStatus(course:Course,active:boolean):Promise<string|null>{
+  if(actionPending.current)return translate("Espera a que termine la operaci\u00f3n actual.");
+  actionPending.current=true;
+  const version=sessionVersion.current;
   setBusy(true);setError("");setNotice("");
   try{
    if(permissions.localData){
     commitGuestData(updateGuestCourse(guestDataRef.current,{...course,is_active:active}));
-    setConfirmDeactivateId("");setNotice(active?"Curso reactivado.":"Curso desactivado. Sus tareas se conservan.");return null;
+   } else {
+    setCourses(previous=>previous.map(item=>item.id===course.id?{...item,is_active:active}:item));
+    setConfirmDeactivateId("");
+    await request(`/courses/${course.id}${active?"/activate":""}`,{method:active?"PATCH":"DELETE"});
+    if(version!==sessionVersion.current)return translate("La sesi\u00f3n cambi\u00f3. Inicia sesi\u00f3n de nuevo.");
    }
-   await request(`/courses/${course.id}${active?"/activate":""}`,{method:active?"PATCH":"DELETE"});
    if(!active&&uploadCourse===course.id)setUploadCourse("");
-   setConfirmDeactivateId("");setNotice(active?"Curso reactivado.":"Curso desactivado. Sus tareas se conservan.");await refresh();return null;
-  }catch(e){const message=e instanceof Error?e.message:String(e);setError(message);return message}finally{setBusy(false)}
+   setConfirmDeactivateId("");setNotice(active?translate("Curso reactivado."):translate("Curso desactivado. Sus tareas se conservan."));return null;
+  }catch(e){
+   const message=e instanceof Error?e.message:String(e);
+   if(version===sessionVersion.current){
+    if(!permissions.localData)setCourses(previous=>previous.map(item=>item.id===course.id?course:item));
+    setError(message);
+   }
+   return message;
+  }finally{actionPending.current=false;if(version===sessionVersion.current)setBusy(false)}
  }
  async function deleteEmptyCourse(course:Course):Promise<string|null>{
-  if(actionPending.current)return "Espera a que termine la operación actual.";
+  if(actionPending.current)return translate("Espera a que termine la operación actual.");
   actionPending.current=true;setBusy(true);setError("");setNotice("");
   const version=sessionVersion.current;
   try{
@@ -283,10 +310,10 @@ export default function Home({ authRoute }: { authRoute?: "login" | "register" }
     commitGuestData(deleteGuestCourse(guestDataRef.current,course.id));
     if(courseFilter===course.id)setCourseFilter("");
     if(panelCourseFilter===course.id)setPanelCourseFilter("");
-    setEditingCourse(null);setNotice("Curso eliminado.");return null;
+    setEditingCourse(null);setNotice(translate("Curso eliminado."));return null;
    }
    await request(`/courses/${course.id}/permanent`,{method:"DELETE"});
-   if(version!==sessionVersion.current)return "La sesión cambió. Inicia sesión de nuevo.";
+   if(version!==sessionVersion.current)return translate("La sesión cambió. Inicia sesión de nuevo.");
    pendingReviews.filter(review=>review.course_id===course.id).forEach(review=>clearReviewDraft(review.document_id,username));
    if(reviewCourseId===course.id){
     clearReviewDraft(docId,username);
@@ -300,7 +327,7 @@ export default function Home({ authRoute }: { authRoute?: "login" | "register" }
    if(courseFilter===course.id)setCourseFilter("");
    if(panelCourseFilter===course.id)setPanelCourseFilter("");
    setEditingCourse(null);
-   setNotice("Curso eliminado.");
+   setNotice(translate("Curso eliminado."));
    return null;
   }catch(e){const message=e instanceof Error?e.message:String(e);if(version===sessionVersion.current)setError(message);return message}
   finally{actionPending.current=false;setBusy(false)}
@@ -320,8 +347,8 @@ export default function Home({ authRoute }: { authRoute?: "login" | "register" }
    setResumeTargetId("");
    setProposals([...restored.proposals].sort(compareActivityDates));
    setPendingReviews(previous=>[restored,...previous.filter(item=>item.document_id!==restored.document_id)]);
-   setNotice(result.proposals.length?"Revisa y edita las propuestas antes de guardarlas.":"No se encontraron actividades explícitas. Puedes probar con otro documento.");
-  }catch(e){if(version===sessionVersion.current)setError(e instanceof Error?e.message:"No se pudo analizar")}
+   setNotice(result.proposals.length?translate("Revisa y edita las propuestas antes de guardarlas."):translate("No se encontraron actividades explícitas. Puedes probar con otro documento."));
+  }catch(e){if(version===sessionVersion.current)setError(e instanceof Error?e.message:translate("No se pudo analizar"))}
   finally{actionPending.current=false;setBusy(false)}
  }
  function edit(i:number,key:keyof Proposal,value:string){
@@ -335,7 +362,7 @@ export default function Home({ authRoute }: { authRoute?: "login" | "register" }
   if(!permissions.documentAnalysis){setRestrictedOpen(true);return}
   if(actionPending.current)return;
   const problem=proposalError(proposals);
-  if(!docId||problem){setError(problem||"Analiza un documento antes de confirmar.");return;}
+  if(!docId||problem){setError(problem||translate("Analiza un documento antes de confirmar."));return;}
   actionPending.current=true;setBusy(true);setError("");setNotice("");
   const version=sessionVersion.current;
   try{
@@ -344,14 +371,17 @@ export default function Home({ authRoute }: { authRoute?: "login" | "register" }
    if(version!==sessionVersion.current)return;
    clearReviewDraft(docId,username);setPendingReviews(previous=>previous.filter(item=>item.document_id!==docId));
    uploadFormRef.current?.reset();setUploadCourse("");setSelectedFileName("");setReviewFileName("");setReviewCourseId("");
-   setProposals([]);setDocId("");setResumeTargetId("");setNotice("Actividades confirmadas y guardadas.");await refresh();
-  }catch(e){if(version===sessionVersion.current)setError(e instanceof Error?e.message:"No se pudo guardar. Tus correcciones se conservan.")}
+   setProposals([]);setDocId("");setResumeTargetId("");setNotice(translate("Actividades confirmadas y guardadas."));await refresh();
+  }catch(e){if(version===sessionVersion.current)setError(e instanceof Error?e.message:translate("No se pudo guardar. Tus correcciones se conservan."))}
   finally{actionPending.current=false;setBusy(false)}
  }
- async function mutateActivity(id:string,method:"PATCH"|"DELETE",data?:Proposal,suffix="",message="Actividad actualizada."):Promise<string|null>{
-  if(actionPending.current)return "Espera a que termine la operación actual.";
+ async function mutateActivity(id:string,method:"PATCH"|"DELETE",data?:Proposal,suffix="",message=translate("Actividad actualizada.")):Promise<string|null>{
+  if(actionPending.current)return translate("Espera a que termine la operación actual.");
   actionPending.current=true;setBusy(true);setError("");
   const version=sessionVersion.current;
+  const original=items.find(item=>item.id===id);
+  const optimisticStatus=!permissions.localData&&(suffix==="complete"||suffix==="reopen");
+  if(optimisticStatus)setItems(previous=>previous.map(item=>item.id===id?{...item,status:suffix==="complete"?"completed":"pending"}:item));
   try{
    if(permissions.localData){
     const next=method==="DELETE"?deleteGuestActivity(guestDataRef.current,id)
@@ -361,37 +391,43 @@ export default function Home({ authRoute }: { authRoute?: "login" | "register" }
     commitGuestData(next);setNotice(message);return null;
    }
    const updated=await request(`/activities/${id}${suffix?`/${suffix}`:""}`,{method,...(data?{body:JSON.stringify(data)}:{})});
-   if(version!==sessionVersion.current)return "La sesión cambió. Inicia sesión de nuevo.";
+   if(version!==sessionVersion.current)return translate("La sesión cambió. Inicia sesión de nuevo.");
    const removedDocumentId=method==="DELETE"?items.find(item=>item.id===id)?.document_id:null;
    setItems(previous=>method==="DELETE"?previous.filter(item=>item.id!==id):previous.map(item=>item.id===id?updated:item));
    if(removedDocumentId)setSavedDocuments(previous=>previous.map(document=>document.document_id===removedDocumentId?
     {...document,activity_count:document.activity_count-1}:document).filter(document=>document.activity_count>0));
    setNotice(message);return null;
-  }catch(e){const message=e instanceof Error?e.message:String(e);if(version===sessionVersion.current)setError(message);return message}
+  }catch(e){const message=e instanceof Error?e.message:String(e);if(version===sessionVersion.current){
+    if(optimisticStatus&&original)setItems(previous=>previous.map(item=>item.id===id?original:item));
+    setError(message);
+   }return message}
   finally{actionPending.current=false;setBusy(false)}
  }
  async function createManualActivity(courseId:string,values:Proposal):Promise<string|null>{
-  if(actionPending.current)return "Espera a que termine la operación actual.";
+  if(actionPending.current)return translate("Espera a que termine la operación actual.");
   actionPending.current=true;setBusy(true);setError("");
   const version=sessionVersion.current;
   try{
    if(permissions.localData){
     commitGuestData(createGuestActivity(guestDataRef.current,courseId,values));
     setCourseFilter("");setTypeFilter("");setStatusFilter("");setFrom("");setTo("");
-    setNotice("Tarea añadida.");return null;
+    setNotice(translate("Tarea añadida."));return null;
    }
    const {title,description,date_warning_reason,activity_type,due_date,review_required,status}=values;
    const created=await request("/activities",{method:"POST",body:JSON.stringify({course_id:courseId,title,description,date_warning_reason:due_date?"":date_warning_reason||"",
     activity_type:activity_type||"otro",due_date,review_required,status:status||"pending"})});
-   if(version!==sessionVersion.current)return "La sesión cambió. Inicia sesión de nuevo.";
+   if(version!==sessionVersion.current)return translate("La sesión cambió. Inicia sesión de nuevo.");
    setItems(previous=>[created,...previous]);
    setCourseFilter("");setTypeFilter("");setStatusFilter("");setFrom("");setTo("");
-   setNotice("Tarea añadida.");return null;
-  }catch(e){const message=e instanceof Error?e.message:"No se pudo añadir la tarea.";if(version===sessionVersion.current)setError(message);return message}
+   setNotice(translate("Tarea añadida."));return null;
+  }catch(e){const message=e instanceof Error?e.message:translate("No se pudo añadir la tarea.");if(version===sessionVersion.current)setError(message);return message}
   finally{actionPending.current=false;setBusy(false)}
  }
- async function complete(id:string){await mutateActivity(id,"PATCH",undefined,"complete","Actividad marcada como hecha.")}
- async function reopen(id:string){await mutateActivity(id,"PATCH",undefined,"reopen","Actividad devuelta a pendientes.")}
+ async function complete(id:string){await mutateActivity(id,"PATCH",undefined,"complete",translate("Actividad marcada como hecha."))}
+ async function reopen(id:string){
+  const problem=await mutateActivity(id,"PATCH",undefined,"reopen",translate("Actividad devuelta a pendientes."));
+  if(!problem){setCourseFilter("");setTypeFilter("");setStatusFilter("");setFrom("");setTo("")}
+ }
  function cancelLogout(){
   if(busy)return;
   setLogoutError("");
@@ -403,11 +439,11 @@ export default function Home({ authRoute }: { authRoute?: "login" | "register" }
   try{
    await request("/auth/logout",{method:"POST"});
    logoutDialogRef.current?.close();setLogoutOpen(false);clearAccount();enterGuest();
-  }catch(e){setLogoutError(e instanceof Error?e.message:"No se pudo cerrar la sesión. Inténtalo de nuevo.")}
+  }catch(e){setLogoutError(e instanceof Error?e.message:translate("No se pudo cerrar la sesión. Inténtalo de nuevo."))}
   finally{actionPending.current=false;setBusy(false)}
  }
  const guest=permissions.localData;
- if(access==="checking")return <main className="session-loading" role="status" aria-live="polite">Cargando Tarevia…</main>;
+ if(access==="checking")return <main className="session-loading" role="status" aria-live="polite">{translate("Cargando Tarevia…")}</main>;
  if(access==="signedOut"||access==="authenticating")return <AuthPage
   authMode={authMode} email={email} setEmail={setEmail}
   username={username} setUsername={setUsername}
@@ -419,16 +455,16 @@ export default function Home({ authRoute }: { authRoute?: "login" | "register" }
   onToggleMode={()=>{const next=authMode==="login"?"register":"login";setAuthMode(next);window.history.pushState({},"",`/${next}${postAuthSection.current==="cargar"?"?next=cargar":""}`);setAuthError("");setPassword("");setPasswordConfirmation("")}}
   onClearAuthError={()=>setAuthError("")} onClearNotice={()=>setNotice("")}
  />;
- return <div className="layout"><dialog ref={logoutDialogRef} className="logout-dialog" aria-labelledby="logout-dialog-title" aria-describedby="logout-dialog-description" onCancel={e=>{e.preventDefault();cancelLogout()}}><h2 id="logout-dialog-title">¿Cerrar sesión?</h2><p id="logout-dialog-description">Continuarás en Tarevia en modo invitado.</p>{logoutError&&<p className="error" role="alert">{logoutError}</p>}<div className="logout-dialog-actions"><button type="button" className="logout-cancel" autoFocus disabled={busy} onClick={cancelLogout}>Cancelar</button><button type="button" className="primary" disabled={busy} onClick={logout}>{busy?"Cerrando sesión…":"Confirmar"}</button></div></dialog><div className="toast-stack">{error&&<Toast key={`error-${errorId}`} kind="error" message={error} onClose={()=>setError("")}/>} {notice&&<Toast key={`notice-${noticeId}`} kind="success" message={notice} onClose={()=>setNotice("")}/>}</div><aside className="sidebar" onKeyDown={event=>{if(event.key==="Escape"&&mobileMenuOpen){setMobileMenuOpen(false);mobileMenuButtonRef.current?.focus()}}}>
+ return <div className="layout"><dialog ref={logoutDialogRef} className="logout-dialog" aria-labelledby="logout-dialog-title" aria-describedby="logout-dialog-description" onCancel={e=>{e.preventDefault();cancelLogout()}}><h2 id="logout-dialog-title">{translate("¿Cerrar sesión?")}</h2><p id="logout-dialog-description">{translate("Continuarás en Tarevia en modo invitado.")}</p>{logoutError&&<p className="error" role="alert">{logoutError}</p>}<div className="logout-dialog-actions"><button type="button" className="logout-cancel" autoFocus disabled={busy} onClick={cancelLogout}>{translate("Cancelar")}</button><button type="button" className="primary" disabled={busy} onClick={logout}>{busy?translate("Cerrando sesión…"):translate("Confirmar")}</button></div></dialog><div className="toast-stack">{error&&<Toast key={`error-${errorId}`} kind="error" message={error} onClose={()=>setError("")}/>} {notice&&<Toast key={`notice-${noticeId}`} kind="success" message={notice} onClose={()=>setNotice("")}/>}</div><aside className="sidebar" onKeyDown={event=>{if(event.key==="Escape"&&mobileMenuOpen){setMobileMenuOpen(false);mobileMenuButtonRef.current?.focus()}}}>
  <div className="brand"><SidebarIcon name="brand"/><b>Tarevia</b></div>
- <button ref={mobileMenuButtonRef} type="button" className="mobile-menu-toggle" aria-label={mobileMenuOpen?"Cerrar menú":"Abrir menú"} aria-expanded={mobileMenuOpen} aria-controls="mobile-navigation" onClick={()=>setMobileMenuOpen(open=>!open)}><span className="mobile-menu-lines" aria-hidden="true"><span/><span/><span/></span></button>
+ <button ref={mobileMenuButtonRef} type="button" className="mobile-menu-toggle" aria-label={mobileMenuOpen?translate("Cerrar menú"):translate("Abrir menú")} aria-expanded={mobileMenuOpen} aria-controls="mobile-navigation" onClick={()=>setMobileMenuOpen(open=>!open)}><span className="mobile-menu-lines" aria-hidden="true"><span/><span/><span/></span></button>
  <div id="mobile-navigation" className={`mobile-nav-panel${mobileMenuOpen?" is-open":""}`}>
- <nav aria-label="Navegación principal">{NAV_ITEMS.map(({id,label})=><button key={id} className={section===id?"nav active":"nav"} aria-current={section===id?"page":undefined} onClick={()=>{setSection(id);setMobileMenuOpen(false);if(id==="tareas")setTaskView("board");setNotice("")}}><SidebarIcon name={id}/><span>{label}</span></button>)}</nav>
- <div className="side-bottom"><UserPreferencesMenu username={guest?"Invitado":username} guest={guest} onSignIn={()=>goToAuth("login")} />{guest?<button className="logout" onClick={()=>goToAuth("login")}><SidebarIcon name="logout"/><span>Iniciar sesión</span></button>:<button ref={logoutButtonRef} className="logout" disabled={busy} onClick={()=>{setMobileMenuOpen(false);setLogoutError("");setLogoutOpen(true)}}><SidebarIcon name="logout"/><span>Cerrar sesión</span></button>}</div>
+ <nav aria-label={translate("Navegación principal")}>{NAV_ITEMS.map(({id,label})=><button key={id} className={section===id?"nav active":"nav"} aria-current={section===id?"page":undefined} onClick={()=>{setSection(id);setMobileMenuOpen(false);if(id==="tareas"){setTaskView("board");setStatusFilter("");}setNotice("")}}><SidebarIcon name={id}/><span>{translate(label)}</span></button>)}</nav>
+ <div className="side-bottom"><UserPreferencesMenu username={guest?"Invitado":username} guest={guest} onSignIn={()=>goToAuth("login")} />{guest?<button className="logout" onClick={()=>goToAuth("login")}><SidebarIcon name="logout"/><span>{translate("Iniciar sesión")}</span></button>:<button ref={logoutButtonRef} className="logout" disabled={busy} onClick={()=>{setMobileMenuOpen(false);setLogoutError("");setLogoutOpen(true)}}><SidebarIcon name="logout"/><span>{translate("Cerrar sesión")}</span></button>}</div>
  </div>
  </aside><main className="main" inert={mobileMenuOpen} aria-hidden={mobileMenuOpen}><div className="content">
- {section==="panel"&&<PanelPage items={items} upcoming={upcoming} overdue={overdue} undated={undated} pastCompleted={pastCompleted} busy={busy} filters={{courses,courseFilter:panelCourseFilter,setCourseFilter:setPanelCourseFilter,typeFilter:panelTypeFilter,setTypeFilter:setPanelTypeFilter,statusFilter:panelStatusFilter,setStatusFilter:setPanelStatusFilter,upcomingWeeks:panelWeeksFilter,setUpcomingWeeks:setPanelWeeksFilter}} loaded={loaded} complete={complete} reopen={reopen} onAnalyze={()=>setSection("cargar")} onShowAll={()=>{setTaskView("list");setSection("tareas")}}/>}
- {section==="tareas"&&<TasksPage items={shown} filters={{courses,courseFilter,setCourseFilter,typeFilter,setTypeFilter,statusFilter,setStatusFilter,from,setFrom,to,setTo}} loaded={loaded} busy={busy} view={taskView} onChangeView={setTaskView} complete={complete} reopen={reopen} onSave={(id,values)=>mutateActivity(id,"PATCH",values)} onCreate={createManualActivity} onDelete={id=>mutateActivity(id,"DELETE",undefined,"","Actividad borrada.")} onCourses={()=>setSection("cursos")}/>}
+ {section==="panel"&&<PanelPage username={guest?translate("Invitado"):username} onOpenTask={id=>{setCourseFilter("");setTypeFilter("");setStatusFilter("pending");setFrom("");setTo("");setFocusedTaskId(id);setTaskView("list");setSection("tareas")}} items={items} upcoming={upcoming} overdue={overdue} undated={undated} pastCompleted={pastCompleted} busy={busy} filters={{courses,courseFilter:panelCourseFilter,setCourseFilter:setPanelCourseFilter,typeFilter:panelTypeFilter,setTypeFilter:setPanelTypeFilter,statusFilter:panelStatusFilter,setStatusFilter:setPanelStatusFilter,upcomingWeeks:panelWeeksFilter,setUpcomingWeeks:setPanelWeeksFilter}} loaded={loaded} complete={complete} reopen={reopen} onAnalyze={()=>setSection("cargar")} onShowAll={()=>{setStatusFilter("");setTaskView("list");setSection("tareas")}}/>}
+ {section==="tareas"&&<TasksPage onRefresh={refreshTaskList} focusedTaskId={focusedTaskId} onTaskOpened={()=>setFocusedTaskId("")} items={shown} filters={{courses,courseFilter,setCourseFilter,typeFilter,setTypeFilter,statusFilter,setStatusFilter,from,setFrom,to,setTo}} loaded={loaded} busy={busy} view={taskView} onChangeView={view=>{setStatusFilter("");setTaskView(view)}} complete={complete} reopen={reopen} onSave={(id,values)=>mutateActivity(id,"PATCH",values)} onCreate={createManualActivity} onDelete={id=>mutateActivity(id,"DELETE",undefined,"","Actividad borrada.")} onCourses={()=>setSection("cursos")}/>}
  {section==="calendario"&&<CalendarPage items={items} courses={courses} loaded={loaded} busy={busy} complete={complete} reopen={reopen}/>}
  {section==="cursos"&&<CoursesPage guest={guest} courses={courses} items={items} loaded={loaded} busy={busy} error={error} onClearError={()=>setError("")} newCourse={newCourse} setNewCourse={setNewCourse} newCourseCode={newCourseCode} setNewCourseCode={setNewCourseCode} newCourseTerm={newCourseTerm} setNewCourseTerm={setNewCourseTerm} editingCourse={editingCourse} setEditingCourse={setEditingCourse} confirmDeactivateId={confirmDeactivateId} setConfirmDeactivateId={setConfirmDeactivateId} onAdd={addCourse} onSave={saveCourse} onChangeStatus={changeCourseStatus} onDeleteEmpty={deleteEmptyCourse}/>}
  {section==="cargar"&&<RestrictedPreview active={!permissions.documentAnalysis} onRestricted={()=>setRestrictedOpen(true)}><AnalyzePage preview={guest} pendingReviews={guest?[]:pendingReviews.filter(review=>review.document_id!==docId)} savedDocuments={guest?[]:savedDocuments} deleteSavedError={deleteSavedError} onClearSavedDeleteError={()=>setDeleteSavedError("")} reviewFileName={guest?"":reviewFileName} reviewCourseId={guest?"":reviewCourseId} onChangeReviewCourse={changeReviewCourse} onResumeReview={resumeReview} onDeleteReview={deleteReview} onDeleteSavedDocument={deleteSavedDocument} reviewRef={reviewRef} uploadFormRef={uploadFormRef} courses={guest?[]:courses} activeCourses={guest?[]:activeCourses} uploadCourse={guest?"":uploadCourse} setUploadCourse={setUploadCourse} selectedFileName={guest?"":selectedFileName} setSelectedFileName={setSelectedFileName} busy={busy} proposals={guest?[]:proposals} setProposals={setProposals} docId={guest?"":docId} reviewError={guest?"":reviewError} onUpload={upload} onEdit={edit} onConfirm={confirm} onCourses={()=>setSection("cursos")}/></RestrictedPreview>}

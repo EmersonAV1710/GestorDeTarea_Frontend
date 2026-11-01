@@ -1,3 +1,4 @@
+import { t } from "../lib/language";
 import { useEffect, useId, useRef } from "react";
 
 export function AuthRequiredDialog({ open, onClose, onLogin, onRegister }: {
@@ -13,12 +14,12 @@ export function AuthRequiredDialog({ open, onClose, onLogin, onRegister }: {
   }, [open]);
   return <dialog ref={dialogRef} className="logout-dialog auth-required-dialog" aria-labelledby={titleId} aria-describedby={descriptionId}
     onCancel={event => { event.preventDefault(); onClose(); }} onClose={onClose}>
-    <h2 id={titleId}>Inicia sesión para continuar</h2>
-    <p id={descriptionId}>Esta función está disponible para usuarios con una cuenta. Inicia sesión o crea una cuenta para acceder a todas las herramientas de Tarevia.</p>
+    <h2 id={titleId}>{t("Inicia sesión para continuar")}</h2>
+    <p id={descriptionId}>{t("Esta función está disponible para usuarios con una cuenta. Inicia sesión o crea una cuenta para acceder a todas las herramientas de Tarevia.")}</p>
     <div className="auth-required-actions">
-      <button type="button" className="logout-cancel" onClick={onClose}>Ahora no</button>
-      <button type="button" className="action-button" onClick={onRegister}>Crear cuenta</button>
-      <button type="button" className="primary" onClick={onLogin}>Iniciar sesión</button>
+      <button type="button" className="logout-cancel" onClick={onClose}>{t("Ahora no")}</button>
+      <button type="button" className="action-button" onClick={onRegister}>{t("Crear cuenta")}</button>
+      <button type="button" className="primary" onClick={onLogin}>{t("Iniciar sesión")}</button>
     </div>
   </dialog>;
 }

@@ -15,6 +15,7 @@ const docId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 
 function createHome(storage=new Map(), pending=[], saved=[], initialItems=items, courseRows=courses, guestStorage=new Map(), authRoute) {
   const timers=[];
+  let mutationGate=null,failMutation=false;
   const state=[],effectDeps=[],effects=[];let cursor=0,effectCursor=0,failUpload=false,failLogout=false,failSavedDelete=false;
   const requests=[];
   const confirmations=[];
@@ -27,6 +28,7 @@ function createHome(storage=new Map(), pending=[], saved=[], initialItems=items,
     useState(initial){const index=cursor++;if(!(index in state))state[index]=typeof initial==='function'?initial():initial;return[state[index],value=>{state[index]=typeof value==='function'?value(state[index]):value}];},
     useRef(initial){return hooks.useState(()=>({current:initial}))[0];},
     useMemo(fn){return fn();},
+    useSyncExternalStore(subscribe,getSnapshot,getServerSnapshot){return getServerSnapshot();},
     useId(){return 'test-id';},
     useEffect(fn,deps){const index=effectCursor++;if(!effectDeps[index]||deps.some((dep,i)=>dep!==effectDeps[index][i])){effectDeps[index]=deps;effects.push(fn);}},
   };
@@ -49,6 +51,13 @@ function createHome(storage=new Map(), pending=[], saved=[], initialItems=items,
       else if(suffix==='/activities'&&init.method==='POST'){
         const body=JSON.parse(init.body);manualCreations.push(body);
         data={...body,id:'manual-task',document_id:null};
+      }
+      else if(/^\/activities\/[^/]+\/(complete|reopen)$/.test(suffix)&&init.method==='PATCH'){
+        if(mutationGate)await mutationGate;
+        if(failMutation)return{ok:false,status:503,json:async()=>({detail:'No se pudo guardar'})};
+        const id=suffix.split('/')[2],index=activityRows.findIndex(item=>item.id===id);
+        activityRows[index]={...activityRows[index],status:suffix.endsWith('/complete')?'completed':'pending'};
+        data=activityRows[index];
       }
       else if(suffix==='/activities')data=activityRows;
       else if(suffix==='/documents/pending')data=pending;
@@ -95,7 +104,7 @@ function createHome(storage=new Map(), pending=[], saved=[], initialItems=items,
   function find(node,predicate){if(!node||typeof node!=='object')return[];return[...(predicate(node)?[node]:[]),...[node.props?.children].flat(Infinity).flatMap(child=>find(child,predicate))];}
   function page(name){let tree=render();if(tree===null||tree?.props?.className==='session-loading')tree=render();return find(tree,node=>node.type?.name===name)[0];}
   function nav(label){const button=find(render(),node=>node.type==='button'&&String(node.props.className).startsWith('nav')&&node.props.children[1].props.children===label)[0];assert(button);button.props.onClick();render();}
-  return{render,page,nav,storage,guestStorage,pending,saved,timers,find,flushEffects(){while(effects.length)effects.shift()()},requests,confirmations,courseChanges,courseCreations,courseEdits,manualCreations,setFailLogout:value=>{failLogout=value},setFailUpload:value=>{failUpload=value},setFailSavedDelete:value=>{failSavedDelete=value}};
+  return{setMutationGate(value){mutationGate=value},setFailMutation(value){failMutation=value},setServerTaskStatus(id,status){const index=activityRows.findIndex(item=>item.id===id);activityRows[index]={...activityRows[index],status};},render,page,nav,storage,guestStorage,pending,saved,timers,find,flushEffects(){while(effects.length)effects.shift()()},requests,confirmations,courseChanges,courseCreations,courseEdits,manualCreations,setFailLogout:value=>{failLogout=value},setFailUpload:value=>{failUpload=value},setFailSavedDelete:value=>{failSavedDelete=value}};
 }
 
 
@@ -601,4 +610,95 @@ test('failed logout keeps the session and shows the error inside the confirmatio
   assert(home.page('PanelPage'));
   const dialog=home.find(home.render(),node=>node.type==='dialog')[0];
   assert.equal(home.find(dialog,node=>node.props?.role==='alert').length,1);
+});
+
+
+test('opening a pending task from the panel does not hide completed tasks when returning to all views', async()=>{
+  const done={...items[0],id:'done-regression',title:'Completed task',status:'completed'};
+  const home=await loggedIn(new Map(),[],[],[...items,done]);
+  home.page('PanelPage').props.onOpenTask('future');
+  let tasks=home.page('TasksPage');
+  assert.equal(tasks.props.filters.statusFilter,'pending');
+  assert.equal(tasks.props.focusedTaskId,'future');
+  assert(tasks.props.items.some(item=>item.id===done.id));
+  tasks.props.onChangeView('board');
+  tasks=home.page('TasksPage');
+  assert.equal(tasks.props.filters.statusFilter,'');
+  assert(tasks.props.items.some(item=>item.status==='completed'));
+  home.nav('Panel');
+  home.page('PanelPage').props.onOpenTask('future');
+  home.nav('Mis tareas');
+  assert.equal(home.page('TasksPage').props.filters.statusFilter,'');
+  home.nav('Panel');
+  home.page('PanelPage').props.onOpenTask('future');
+  home.nav('Panel');
+  home.page('PanelPage').props.onShowAll();
+  assert.equal(home.page('TasksPage').props.filters.statusFilter,'');
+});
+
+
+test('refreshing Mis tareas reloads account tasks without leaving the section', async()=>{
+  const home=await loggedIn();
+  home.nav('Mis tareas');
+  const before=home.requests.filter(url=>url==='/activities').length;
+  await home.page('TasksPage').props.onRefresh();
+  assert.equal(home.requests.filter(url=>url==='/activities').length,before+1);
+  assert(home.page('TasksPage'));
+  assert.equal(home.page('TasksPage').props.busy,false);
+});
+
+
+test('refresh returns a task moved out of completed to the pending list', async()=>{
+  const done={...items[0],id:'reopened-on-server',status:'completed'};
+  const home=await loggedIn(new Map(),[],[],[done]);
+  home.nav('Mis tareas');
+  assert.equal(home.page('TasksPage').props.items[0].status,'completed');
+  home.setServerTaskStatus(done.id,'pending');
+  await home.page('TasksPage').props.onRefresh();
+  assert.equal(home.page('TasksPage').props.items.find(item=>item.id===done.id).status,'pending');
+});
+
+
+test('a task completes, reopens from Hechas and remains pending after refresh', async()=>{
+  const task={...items[0],id:'round-trip-task'};
+  const home=await loggedIn(new Map(),[],[],[task]);
+  home.nav('Mis tareas');
+  await home.page('TasksPage').props.complete(task.id);
+  assert.equal(home.page('TasksPage').props.items[0].status,'completed');
+  home.page('TasksPage').props.filters.setStatusFilter('completed');
+  await home.page('TasksPage').props.reopen(task.id);
+  assert.equal(home.page('TasksPage').props.filters.statusFilter,'');
+  assert.equal(home.page('TasksPage').props.items[0].status,'pending');
+  await home.page('TasksPage').props.onRefresh();
+  assert.equal(home.page('TasksPage').props.items[0].status,'pending');
+});
+
+
+test('status changes show immediately while the server is still saving', async()=>{
+  const home=await loggedIn(new Map(),[],[],[{...items[0],id:'instant-task'}]);
+  home.nav('Mis tareas');
+  let release;
+  home.setMutationGate(new Promise(resolve=>{release=resolve}));
+  const saving=home.page('TasksPage').props.complete('instant-task');
+  assert.equal(home.page('TasksPage').props.items[0].status,'completed');
+  release();await saving;
+  let releaseReopen;
+  home.setMutationGate(new Promise(resolve=>{releaseReopen=resolve}));
+  const reopening=home.page('TasksPage').props.reopen('instant-task');
+  assert.equal(home.page('TasksPage').props.items[0].status,'pending');
+  releaseReopen();await reopening;
+  assert.equal(home.page('TasksPage').props.items[0].status,'pending');
+});
+
+test('failed status changes restore the original task instead of losing it', async()=>{
+  const home=await loggedIn(new Map(),[],[],[{...items[0],id:'rollback-task'}]);
+  home.nav('Mis tareas');
+  home.setFailMutation(true);
+  await home.page('TasksPage').props.complete('rollback-task');
+  assert.equal(home.page('TasksPage').props.items[0].status,'pending');
+  home.setFailMutation(false);
+  await home.page('TasksPage').props.complete('rollback-task');
+  home.setFailMutation(true);
+  await home.page('TasksPage').props.reopen('rollback-task');
+  assert.equal(home.page('TasksPage').props.items[0].status,'completed');
 });

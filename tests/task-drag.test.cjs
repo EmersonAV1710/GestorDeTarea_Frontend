@@ -59,7 +59,7 @@ function createBoard(busy = false, withCourse = false) {
     return lists.flatMap(node => find(ActivityList(node.props), child => child.type === "article")).find(node => node.key === id);
   }
   function column(status) {
-    return find(render(), node => node.props?.["aria-labelledby"] === (status === "pending" ? "pending-tasks-title" : "done-tasks-title"))[0];
+    return find(render(), node => node.type === "section" && node.props?.["aria-labelledby"] === (status === "pending" ? "pending-tasks-title" : "done-tasks-title"))[0];
   }
   const data = new Map();
   const event = { dataTransfer: { setData: (type, value) => data.set(type, value), getData: type => data.get(type) || "" },
@@ -132,7 +132,7 @@ test("editing a task with a past date can set delivered or overdue status", asyn
   const board = createBoard();
   const editButton = () => board.find(board.card("pending"), node => node.type === "button" && node.props?.["aria-label"] === "Modificar Pendiente")[0];
   editButton().props.onClick({ currentTarget: { closest: () => ({ removeAttribute() {} }) } });
-  const dialog = () => board.find(board.render(), node => node.type === "dialog")[0];
+  const dialog = () => board.find(board.render(), node => node.type === "dialog" && String(node.props.className).includes("task-dialog"))[0];
   const dateInput = () => board.find(dialog(), node => node.type === "input" && node.props.type === "date")[0];
   dateInput().props.onChange({ target: { value: "2000-01-01" } });
   const statusSelect = () => board.find(dialog(), node => node.type === "select" &&
@@ -190,4 +190,18 @@ test("manual task form creates a task without a document", async () => {
   assert.equal(board.calls[0][2].review_required, true);
   assert.equal("document_id" in board.calls[0][2], false);
   assert.equal(board.find(board.render(), node => node.props?.["aria-labelledby"] === "manual-task-title").length, 0);
+});
+
+
+test("completed tasks open in a floating dialog and close without losing tasks", () => {
+  const board = createBoard();
+  const trigger = () => board.find(board.render(), node => node.type === "button" && node.props["aria-controls"] === "completed-tasks-dialog")[0];
+  assert.equal(trigger().props["aria-expanded"], false);
+  trigger().props.onClick();
+  assert.equal(trigger().props["aria-expanded"], true);
+  const dialog = board.find(board.render(), node => node.type === "dialog" && node.props.id === "completed-tasks-dialog")[0];
+  assert.equal(dialog.props["aria-labelledby"], "done-tasks-title");
+  dialog.props.onCancel({ preventDefault() {} });
+  assert.equal(trigger().props["aria-expanded"], false);
+  assert(board.card("done"));
 });
