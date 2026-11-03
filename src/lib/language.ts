@@ -1,4 +1,5 @@
 "use client";
+import { savePreference } from "./profilePreferences";
 
 import { useSyncExternalStore } from "react";
 import { english } from "./translations";
@@ -28,7 +29,7 @@ function subscribe(listener: () => void) {
 export function setLanguage(next: Language) {
   language = next;
   document.documentElement.lang = next;
-  try { localStorage.setItem("tarevia-language", next); } catch {}
+  try { savePreference("language", next); } catch {}
   listeners.forEach(listener => listener());
 }
 export function useLanguage() {

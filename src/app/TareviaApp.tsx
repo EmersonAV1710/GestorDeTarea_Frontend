@@ -1,4 +1,7 @@
 "use client";
+import { useScreenScroll } from "../lib/useScreenScroll";
+import { useInterfaceSounds, playInterfaceSound } from "../lib/interfaceSounds";
+import { selectPreferenceProfile } from "../lib/profilePreferences";
 import { t as translate, useLanguage } from "../lib/language";
 import {useEffect,useMemo,useRef,useState} from "react";
 import { clearReviewDraft, parsePendingReviews, parseSavedDocuments, restoreReviewDraft, storeReviewDraft, type PendingReview, type SavedDocument } from "../lib/reviewDraft";
@@ -42,6 +45,7 @@ function useTimedMessage(autoClose = true) {
 }
 export default function Home({ authRoute }: { authRoute?: "login" | "register" } = {}){
  useLanguage();
+ useInterfaceSounds();
  const [access,setAccess]=useState<AccessState>("checking");
  const permissions=accessPermissions(access);
  const [restrictedOpen,setRestrictedOpen]=useState(false);
@@ -67,6 +71,7 @@ export default function Home({ authRoute }: { authRoute?: "login" | "register" }
   storeReviewDraft(review,username);
   setPendingReviews(previous=>previous.map(item=>item.document_id===docId?review:item));
  },[docId,proposals,username,reviewFileName,reviewCourseId]);
+ useScreenScroll(`${access}:${username}:${section}:${section==="tareas"?taskView:""}`,!!focusedTaskId||!!resumeTargetId);
  const uploadFormRef=useRef<HTMLFormElement>(null);
  const reviewRef=useRef<HTMLElement>(null);
  const actionPending=useRef(false);
@@ -105,6 +110,7 @@ export default function Home({ authRoute }: { authRoute?: "login" | "register" }
   if(!logoutOpen&&dialog?.open)dialog.close();
  },[logoutOpen]);
  function clearAccount(){
+  selectPreferenceProfile();
   sessionVersion.current+=1;
   try {sessionStorage.removeItem("gestor_token");sessionStorage.removeItem("gestor_username")} catch { /* El estado privado se limpia igualmente. */ }
   setToken("");setAccess("signedOut");setUsername("");setEmail("");setCourses([]);setItems([]);setProposals([]);setDocId("");
@@ -124,12 +130,12 @@ export default function Home({ authRoute }: { authRoute?: "login" | "register" }
  };
  async function loadAccount(t:string,draftUsername:string){
   const headers={Authorization:`Bearer ${t}`};
-  const [c,a,d,s]=await Promise.all([fetch(API+"/courses",{headers,cache:"no-store"}),fetch(API+"/activities",{headers,cache:"no-store"}),fetch(API+"/documents/pending",{headers,cache:"no-store"}),fetch(API+"/documents",{headers,cache:"no-store"})]);
-  if(c.status===401||a.status===401||d.status===401||s.status===401)throw new SessionExpiredError(translate("Tu sesión venció. Ingresa de nuevo."));
-  if(!c.ok||!a.ok||!d.ok||!s.ok)throw Error(translate("No se pudo cargar la información. Inténtalo de nuevo."));
+  const [c,a,d,s,p]=await Promise.all([fetch(API+"/courses",{headers,cache:"no-store"}),fetch(API+"/activities",{headers,cache:"no-store"}),fetch(API+"/documents/pending",{headers,cache:"no-store"}),fetch(API+"/documents",{headers,cache:"no-store"}),fetch(API+"/profile/preferences",{headers,cache:"no-store"})]);
+  if(c.status===401||a.status===401||d.status===401||s.status===401||p.status===401)throw new SessionExpiredError(translate("Tu sesión venció. Ingresa de nuevo."));
+  if(!c.ok||!a.ok||!d.ok||!s.ok||!p.ok)throw Error(translate("No se pudo cargar la información. Inténtalo de nuevo."));
   const [courses,items]=await Promise.all([c.json(),a.json()]);
   if(!Array.isArray(courses)||!Array.isArray(items))throw Error(translate("El servidor devolvió información inválida."));
-  return {courses,items,pendingReviews:parsePendingReviews(await d.json()).map(review=>restoreReviewDraft(review,draftUsername)),savedDocuments:parseSavedDocuments(await s.json())};
+  return {preferences:await p.json(),courses,items,pendingReviews:parsePendingReviews(await d.json()).map(review=>restoreReviewDraft(review,draftUsername)),savedDocuments:parseSavedDocuments(await s.json())};
  }
  async function refreshTaskList(){
   if(busy)return;
@@ -162,6 +168,7 @@ export default function Home({ authRoute }: { authRoute?: "login" | "register" }
   catch {setError(translate("No se pudo acceder a la sesión guardada. Continúas en modo invitado."))}
   if(t)void loadAccount(t,savedUsername).then(data=>{
    if(cancelled||version!==sessionVersion.current)return;
+   selectPreferenceProfile(savedUsername,t,data.preferences);
    setToken(t);setAccess("authenticated");setUsername(savedUsername.toUpperCase());setCourses(data.courses);setItems(data.items);setPendingReviews(data.pendingReviews);setSavedDocuments(data.savedDocuments);setLoaded(true);setSection("panel");
    if(authRoute)window.history.replaceState({},"","/");
   }).catch(e=>{if(!cancelled&&version===sessionVersion.current){clearAccount();enterGuest();if(authRoute)window.history.replaceState({},"","/");if(!(e instanceof SessionExpiredError))setError(e instanceof Error?e.message:translate("No se pudo verificar la sesión."))}});
@@ -175,6 +182,7 @@ export default function Home({ authRoute }: { authRoute?: "login" | "register" }
   guestDataRef.current=next;setCourses(next.courses);setItems(next.activities);
  }
  function enterGuest(){
+  selectPreferenceProfile();
   let data=emptyGuestData();
   try {data=readGuestData(localStorage);guestDataReadable.current=true}
   catch(e){guestDataReadable.current=false;setError(e instanceof Error?e.message:translate("No se pudieron cargar los datos locales."))}
@@ -255,6 +263,7 @@ export default function Home({ authRoute }: { authRoute?: "login" | "register" }
    const d=await r.json();if(!r.ok)throw Error(apiError(d,translate("No se pudo iniciar sesión")));
    const data=await loadAccount(d.access_token,d.username);
    sessionStorage.setItem("gestor_token",d.access_token);sessionStorage.setItem("gestor_username",d.username.toUpperCase());
+   selectPreferenceProfile(d.username,d.access_token,data.preferences);
    sessionVersion.current+=1;setUsername(d.username.toUpperCase());setToken(d.access_token);setPassword("");
    setCourses(data.courses);setItems(data.items);setPendingReviews(data.pendingReviews);setSavedDocuments(data.savedDocuments);setLoaded(true);setNotice("");
    setCourseFilter("");setPanelCourseFilter("");setSection(postAuthSection.current);postAuthSection.current="panel";setAccess("authenticated");
@@ -399,7 +408,7 @@ export default function Home({ authRoute }: { authRoute?: "login" | "register" }
    setNotice(message);return null;
   }catch(e){const message=e instanceof Error?e.message:String(e);if(version===sessionVersion.current){
     if(optimisticStatus&&original)setItems(previous=>previous.map(item=>item.id===id?original:item));
-    setError(message);
+    setError(message);playInterfaceSound("error");
    }return message}
   finally{actionPending.current=false;setBusy(false)}
  }

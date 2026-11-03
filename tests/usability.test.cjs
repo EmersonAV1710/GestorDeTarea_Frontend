@@ -60,6 +60,7 @@ function createHome(storage=new Map(), pending=[], saved=[], initialItems=items,
         data=activityRows[index];
       }
       else if(suffix==='/activities')data=activityRows;
+      else if(suffix==='/profile/preferences')data=null;
       else if(suffix==='/documents/pending')data=pending;
       else if(suffix==='/documents')data=saved;
       else if(suffix.startsWith('/documents/')&&init.method==='PATCH'){

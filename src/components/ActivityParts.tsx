@@ -1,3 +1,4 @@
+import { playInterfaceSound } from "../lib/interfaceSounds";
 import { t, locale } from "../lib/language";
 import { compareActivityDates } from "../lib/activityOrder";
 import { useId, useRef, useState, type DragEvent, type ReactNode } from "react";
@@ -61,6 +62,7 @@ function CompleteTaskCheck({ activity, busy, complete }: { activity: Activity; b
     if (busy || pending.current) return;
     pending.current = true;
     setChecking(true);
+    playInterfaceSound("success");
     try {
       const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       if (!reduced) await new Promise<void>(resolve => window.setTimeout(resolve, 180));
@@ -70,7 +72,7 @@ function CompleteTaskCheck({ activity, busy, complete }: { activity: Activity; b
       setChecking(false);
     }
   }
-  return <label className={`activity-check animated-task-check${checking ? " is-checking" : ""}`}>
+  return <label data-sound-ignore className={`activity-check animated-task-check${checking ? " is-checking" : ""}`}>
     <input className="checkmark" type="checkbox" checked={checking} disabled={busy || checking} onChange={() => void check()} aria-label={`Completar ${activity.title}`} aria-busy={checking} />
     <span className="task-check-visual" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m5 12 4.5 4.5L19 7" pathLength="1" /></svg></span>
   </label>;
@@ -95,12 +97,18 @@ export function ActivityList({ items, courses, complete, loaded, reopen, onEdit,
     const dueLabel = dueDate ? `${activity.due_date === today ? t("Hoy") + ", " : ""}${dueDate.toLocaleDateString(locale(), { day: "numeric", month: "long" })}` : t("Sin fecha");
     const dateReason = !activity.due_date ? (dateWarning.reason || dateWarningReason(dateWarning.description, warning.yearUnconfirmed)) : null;
     return <article id={`activity-${activity.id}`} className={`activity activity-kind-${activity.activity_type || "otro"}${draggingId === activity.id ? " is-dragging" : ""}${highlightedId === activity.id ? " is-returned" : ""}`} key={activity.id}
-    draggable={draggable && !busy} onDragStart={event => onDragStart?.(activity, event)} onDragEnd={onDragEnd}>
+    draggable={draggable && !busy} onDragStart={event => onDragStart?.(activity, event)} onDragEnd={onDragEnd}
+    onClick={event => {
+      if (event.defaultPrevented || draggingId || !(event.target instanceof Element)) return;
+      if (event.target.closest("button, input, label, a, summary, details, dialog, .task-drag-handle")) return;
+      if (window.getSelection()?.toString()) return;
+      event.currentTarget.querySelector<HTMLDialogElement>("dialog.activity-details-dialog")?.showModal();
+    }}>
     {activity.status === "completed"
       ? <span className="activity-check"><span className="checkmark completed-checkmark" role="img" aria-label={`Hecha: ${activity.title}`}>✓</span></span>
       : <CompleteTaskCheck activity={activity} busy={busy} complete={complete} />}
     <div className="activity-body">
-      <div className="activity-heading"><b className={activity.status === "completed" ? "finished" : ""}>{activity.title}</b>
+      <div className="activity-heading"><button type="button" className="activity-details-trigger" aria-haspopup="dialog" aria-label={`${t("Ver detalles")}: ${activity.title}`} onClick={event => event.currentTarget.closest("article")?.querySelector<HTMLDialogElement>("dialog.activity-details-dialog")?.showModal()}><b className={activity.status === "completed" ? "finished" : ""}>{activity.title}</b></button>
         <details className="activity-menu" onToggle={event => closeOtherActionMenus(event.currentTarget)}>
           <summary aria-label={`Acciones de ${activity.title}`} title={t("Opciones de la tarea")}>···</summary>
           <div className="activity-menu-options">
@@ -112,13 +120,20 @@ export function ActivityList({ items, courses, complete, loaded, reopen, onEdit,
         </details>
       </div>
       <p>{dateWarning.description || t("Sin descripción")}</p>
-      <small><span className="activity-type">{t(activityTypeLabel(activity.activity_type))}</span>{courseName}{activity.status !== "completed" && activity.due_date && activity.due_date < today && <em>{t("Vencida")}</em>}{activity.review_required && <em>{t("Revisar")}</em>}</small>
+      <small><span className="activity-type">{t(activityTypeLabel(activity.activity_type))}</span>{courseName}{activity.status !== "completed" && activity.due_date && activity.due_date < today && <em className="activity-overdue">{t("Vencida")}</em>}{activity.review_required && <em>{t("Revisar")}</em>}</small>
     </div>
     {draggable && <span className="task-drag-handle" aria-hidden="true" title={t("Arrastrar tarjeta")}>
       <svg viewBox="0 0 16 20" width="16" height="20" fill="currentColor"><circle cx="5" cy="5" r="1.4" /><circle cx="11" cy="5" r="1.4" /><circle cx="5" cy="10" r="1.4" /><circle cx="11" cy="10" r="1.4" /><circle cx="5" cy="15" r="1.4" /><circle cx="11" cy="15" r="1.4" /></svg>
     </span>}
     <div className="due"><span>{dueLabel}</span>{dateReason && <details className="activity-date-warning"><summary aria-label={`Motivo de la fecha sin confirmar: ${dateReason}`}><WarningIcon size={19} /><span className="activity-date-tooltip" role="tooltip">{dateReason}</span></summary></details>}</div>
-    <dialog className="activity-details-dialog" aria-label={`Detalles de ${activity.title}`}>
+    <dialog className="activity-details-dialog" aria-label={`Detalles de ${activity.title}`}
+      onClick={event => {
+        if (event.target !== event.currentTarget) return;
+        const bounds = event.currentTarget.getBoundingClientRect();
+        if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) {
+          event.currentTarget.close();
+        }
+      }}>
       <h2>{activity.title}</h2>
       <dl>
         <div><dt>{t("Curso")}</dt><dd>{courseName}</dd></div>

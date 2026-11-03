@@ -1,4 +1,5 @@
 "use client";
+import { savePreference } from "../lib/profilePreferences";
 import { t } from "../lib/language";
 
 import { useEffect, useState } from "react";
@@ -34,7 +35,7 @@ export function ThemeToggle({ showLabel = false }: { showLabel?: boolean }) {
     const theme = next ? "dark" : "light";
     document.documentElement.dataset.theme = theme;
     setDark(next);
-    try { localStorage.setItem("tarevia-theme", theme); } catch {}
+    try { savePreference("theme", theme); } catch {}
   }
 
   if (showLabel) {

@@ -3,6 +3,7 @@ import { useEffect, useId, useState } from "react";
 import { compareActivityDates } from "../../lib/activityOrder";
 import { localToday } from "../../lib/proposals";
 import { TaskCourseChart } from "../TaskCourseChart";
+import { activityTypeLabel } from "../../lib/activityTypes";
 import type { Activity, FilterProps } from "../types";
 
 type Props = {
@@ -58,7 +59,7 @@ export function PanelPage({ items, filters, loaded, onAnalyze, onShowAll, userna
     <div className="welcome"><div><h1>{greeting}, {username}.</h1><p className="muted">{t("Tus actividades de un vistazo.")}</p></div><button className="primary" onClick={onAnalyze}>{t("Analizar documento")}</button></div>
     <div className="panel-summary-grid">
       <section className="panel panel-ring-card" aria-labelledby="progress-title">
-        <div><span className="progress-kicker">{t("Paso a paso")}</span><h2 id="progress-title">{t("Mi progreso")}</h2></div>
+        <div><h2 id="progress-title">{t("Mi progreso")}</h2></div>
         <div className="panel-progress-interactive"><div className="panel-progress-ring" tabIndex={0} aria-describedby={progressSummaryId} role="progressbar" aria-label={t("Progreso de tareas completadas")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
           <svg viewBox="0 0 200 200" aria-hidden="true">
             <defs><mask id={ringMaskId}><circle className="ring-reveal" cx="100" cy="100" r="82" pathLength="100" stroke="white" strokeDasharray={`${percent} 100`}/></mask></defs>
@@ -88,10 +89,11 @@ export function PanelPage({ items, filters, loaded, onAnalyze, onShowAll, userna
         </div></div>
         <p className="muted">{loaded ? `${completed} ${t("de")} ${total} ${t("tareas completadas")}` : t("Cargando…")}</p>
       </section>
+
       <section className="panel panel-upcoming-card" aria-labelledby="upcoming-title">
         <div className="section-head"><div><span className="progress-kicker">{t("Tu agenda")}</span><h2 id="upcoming-title">{t("Actividades próximas")}</h2></div><button className="text-button" onClick={onShowAll}>{t("Ver todas")}</button></div>
-        {!loaded ? <p className="muted" role="status">{t("Cargando…")}</p> : upcomingTasks.length ? <div className="panel-task-previews">{upcomingTasks.map(activity => <button type="button" className="panel-task-preview" key={activity.id} onClick={() => onOpenTask(activity.id)} aria-label={`${t("Ver detalles")}: ${activity.title}`}>
-          <span className="panel-preview-mark" aria-hidden="true"/><span className="panel-preview-copy"><strong>{activity.title}</strong><span>{filters.courses.find(course => course.id === activity.course_id)?.name || t("Curso")}</span></span>
+        {!loaded ? <p className="muted" role="status">{t("Cargando…")}</p> : upcomingTasks.length ? <div className="panel-task-previews">{upcomingTasks.map(activity => <button type="button" className={`panel-task-preview activity-kind-${activity.activity_type || "otro"}`} key={activity.id} onClick={() => onOpenTask(activity.id)} aria-label={`${t("Ver detalles")}: ${activity.title}`}>
+          <span className="panel-preview-copy"><strong>{activity.title}</strong><span className="panel-preview-type">{t(activityTypeLabel(activity.activity_type))}</span><span>{filters.courses.find(course => course.id === activity.course_id)?.name || t("Curso")}</span></span>
           <time dateTime={activity.due_date!}>{new Date(`${activity.due_date}T12:00:00`).toLocaleDateString(locale(), { day: "numeric", month: "short" })}</time><span aria-hidden="true">↗</span>
         </button>)}</div> : <div className="panel-agenda-empty"><span aria-hidden="true">↗</span><h3>{t("Tu agenda está despejada")}</h3><p className="muted">{t("No tienes tareas pendientes con una fecha próxima.")}</p></div>}
       </section>

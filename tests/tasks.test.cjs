@@ -136,7 +136,7 @@ test("past pending activities show as overdue while delivered activities stay co
   const html = renderToStaticMarkup(React.createElement(ActivityList, {
     items: dated, courses: [course], loaded: true, complete() {}, reopen() {},
   }));
-  assert.equal((html.match(/<em>Vencida<\/em>/g) || []).length, 1);
+  assert.equal((html.match(/<em class="activity-overdue">Vencida<\/em>/g) || []).length, 1);
   assert.match(html, /class="finished">Tarea hecha/);
 });
 
@@ -289,7 +289,7 @@ test("dashboard previews four pending deadlines without exposing descriptions", 
   const done = { ...items[1], title: "Already done", due_date: "2099-01-01" };
   const html = renderToStaticMarkup(React.createElement(PanelPage, { ...props, username: "Jordan", items: [...pending, done], onAnalyze() {}, onShowAll() {}, onOpenTask() {} }));
   assert.match(html, /Hola, Jordan/);
-  assert.equal((html.match(/class="panel-task-preview"/g) || []).length, 4);
+  assert.equal((html.match(/class="panel-task-preview(?:\s[^"]*)?"/g) || []).length, 4);
   assert.ok(html.indexOf("Next 0") < html.indexOf("Next 1"));
   assert.doesNotMatch(html, /Next 4|Already done|Private full description/);
   assert.match(html, /role="progressbar"[^>]*aria-valuenow="17"/);

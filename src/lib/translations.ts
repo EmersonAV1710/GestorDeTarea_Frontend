@@ -1,4 +1,12 @@
 export const english: Record<string, string> = {
+  "Estilo del modo oscuro": "Dark mode style", "Gris oscuro": "Dark gray", "Negro": "Black",
+  "Avance por curso": "Course progress",
+  "Porcelana": "Porcelain", "Cielo": "Sky", "Pistacho": "Pistachio", "Vainilla": "Vanilla", "Pétalos": "Petals", "Lila": "Lilac",
+  "Sonidos": "Sounds",
+  "No se pudo guardar en tu cuenta. Vuelve a seleccionar la opción para reintentar.": "Could not save to your account. Select the option again to retry.",
+  "Guardando preferencias…": "Saving preferences…",
+  "Preferencias guardadas en tu cuenta": "Preferences saved to your account",
+  "Coral": "Coral", "Petróleo": "Petrol", "Uva": "Grape", "Cobre": "Copper", "Oliva": "Olive", "Frambuesa": "Raspberry", "Lavanda": "Lavender", "Durazno": "Peach", "Laguna": "Lagoon", "Cerezo": "Cherry blossom", "Café": "Coffee", "Galaxia": "Galaxy",
   "Tu actividad": "Your activity", "Tareas por curso": "Tasks by course", "Compara tus pendientes y completadas en cada curso.": "Compare pending and completed tasks in each course.", "Tus tareas aparecerán aquí cuando agregues actividades a tus cursos.": "Your tasks will appear here when you add activities to your courses.", "Número de tareas por curso": "Number of tasks per course",
 
   "Tema del fondo": "Background theme", "Océano": "Ocean", "Aurora": "Aurora", "Brisa": "Breeze", "Atardecer": "Sunset", "Desierto": "Desert", "Neblina": "Mist", "Rojo": "Red", "Dorado": "Gold", "Lima": "Lime", "Cian": "Cyan", "Índigo": "Indigo", "Fucsia": "Fuchsia", "Plata": "Silver",
